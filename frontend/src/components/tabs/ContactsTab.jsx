@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { Card, CmdBtn, Table, Empty, useData, parseCcsData } from './shared';
 
-export default function ContactsTab({ device, data, send }) {
+export default function ContactsTab({ device, send }) {
   const { data, loading, load } = useData(device.id, 'contacts');
   useEffect(() => { load(); }, [device.id]);
 

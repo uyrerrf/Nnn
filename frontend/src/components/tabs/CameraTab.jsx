@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { Card, CmdBtn, Empty, C, useData } from './shared';
 
-export default function CameraTab({ device, data, send }) {
+export default function CameraTab({ device, send }) {
   const { data, loading, load } = useData(device.id, 'photo');
   useEffect(() => { load(50); }, [device.id]);
 

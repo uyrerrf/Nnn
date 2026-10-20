@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { api } from '../../lib/api';
 import { Card, CmdBtn, Empty, C, useData } from './shared';
 
-export default function AppsTab({ device, data, send }) {
+export default function AppsTab({ device, send }) {
   const { data, loading, load } = useData(device.id, 'apps');
   const [filter, setFilter] = useState('');
   useEffect(() => { load(); }, [device.id]);

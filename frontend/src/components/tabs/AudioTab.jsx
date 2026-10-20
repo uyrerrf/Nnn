@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Card, CmdBtn, Empty, C, useData } from './shared';
 
-export default function AudioTab({ device, data, send }) {
+export default function AudioTab({ device, send }) {
   const { data, loading, load } = useData(device.id, 'audio');
   const [active, setActive] = useState(false);
   useEffect(() => { load(30); }, [device.id]);

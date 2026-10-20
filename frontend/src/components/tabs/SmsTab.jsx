@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { Card, CmdBtn, Table, Empty, useData, parseCcsData } from './shared';
 
-export default function SmsTab({ device, data, send }) {
+export default function SmsTab({ device, send }) {
   const { data, loading, load } = useData(device.id, 'sms');
   useEffect(() => { load(); }, [device.id]);
 
