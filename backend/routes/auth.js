@@ -1,11 +1,15 @@
 'use strict';
 const express = require('express');
-const jwt = require('jsonwebtoken');
+const bcrypt  = require('bcryptjs');
+const jwt     = require('jsonwebtoken');
 
 const router = express.Router();
 
 // POST /api/auth/login
 // Body: { username, password }
+//
+// FIX: was reading ADMIN_PASSWORD (plaintext) but .env.example ships
+// ADMIN_PASSWORD_HASH (bcrypt). Now uses bcrypt.compare against the hash.
 router.post('/login', async (req, res) => {
   try {
     const { username, password } = req.body;
@@ -15,14 +19,19 @@ router.post('/login', async (req, res) => {
     }
 
     const adminUser = process.env.ADMIN_USERNAME;
-    const adminPass = process.env.ADMIN_PASSWORD;
+    const adminHash = process.env.ADMIN_PASSWORD_HASH;
 
-    if (!adminUser || !adminPass) {
-      console.error('[AUTH] ADMIN_USERNAME / ADMIN_PASSWORD not set in env');
+    if (!adminUser || !adminHash) {
+      console.error('[AUTH] ADMIN_USERNAME / ADMIN_PASSWORD_HASH not set in env');
       return res.status(500).json({ error: 'Server auth not configured' });
     }
 
-    if (username !== adminUser || password !== adminPass) {
+    if (username !== adminUser) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    const ok = await bcrypt.compare(password, adminHash);
+    if (!ok) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
@@ -48,8 +57,8 @@ router.post('/refresh', (req, res) => {
   try {
     const payload = jwt.verify(token, process.env.JWT_SECRET, { ignoreExpiration: true });
     const now = Math.floor(Date.now() / 1000);
-    if (now - payload.exp > 3600) {
-      return res.status(401).json({ error: 'Token expired too long ago' });
+    if (payload.exp && payload.exp < now - 86400) {
+      return res.status(401).json({ error: 'Token too old to refresh' });
     }
     const newToken = jwt.sign(
       { username: payload.username, role: payload.role },
@@ -63,4 +72,3 @@ router.post('/refresh', (req, res) => {
 });
 
 module.exports = router;
-    

