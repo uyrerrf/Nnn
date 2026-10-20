@@ -1,5 +1,5 @@
 const BASE = '/api';
-const tok = () => localStorage.getItem('c2_token') || '';
+const tok = () => localStorage.getItem('token') || '';
 
 // Parse a response body safely. If the server (or a proxy, or Render's
 // cold-start, or the SPA fallback) hands us HTML, never let it explode
