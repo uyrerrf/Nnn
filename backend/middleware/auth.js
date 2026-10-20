@@ -1,6 +1,10 @@
 'use strict';
 const jwt = require('jsonwebtoken');
 
+// FIX: removed socketAuthMiddleware — it referenced socket.handshake which is
+// Socket.IO API. This project uses raw `ws` and handles auth inline in
+// server.js panelWss.on('connection'). Dead code deleted.
+
 function authMiddleware(req, res, next) {
   const header = req.headers.authorization || '';
   const token = header.startsWith('Bearer ') ? header.slice(7) : null;
@@ -17,19 +21,4 @@ function authMiddleware(req, res, next) {
   }
 }
 
-function socketAuthMiddleware(socket, next) {
-  const token = socket.handshake.auth?.token || socket.handshake.headers?.authorization?.slice(7);
-
-  if (!token) {
-    return next(new Error('Authentication required'));
-  }
-
-  try {
-    socket.user = jwt.verify(token, process.env.JWT_SECRET);
-    next();
-  } catch {
-    next(new Error('Invalid token'));
-  }
-}
-
-module.exports = { authMiddleware, socketAuthMiddleware };
+module.exports = { authMiddleware };
