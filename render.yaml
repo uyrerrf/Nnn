@@ -1,0 +1,18 @@
+services:
+
+- type: web
+  name: rt-c2
+  runtime: node
+  plan: free
+  buildCommand: npm install
+  startCommand: node server.js
+  healthCheckPath: /api/bots
+  envVars:
+  - key: NODE_VERSION
+    value: "18.17.0"
+  - key: HOST
+    value: 0.0.0.0
+  - key: DB_PATH
+    value: /tmp/rats.db
+  - key: OP_TOKEN
+    generateValue: true
