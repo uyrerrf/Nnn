@@ -1,37 +1,53 @@
-# Flash Dashboard — Render deployment (FREE TIER — testing only)
-# Note: free web services sleep after 15 min idle. Long-lived WS
-# connections (/ws/device, /ws/dashboard) will be cut when it sleeps.
-# Fine for UI/REST testing. Move to starter when you need persistent uptime.
+# ─────────────────────────────────────────────────────────────
+#  Flash C2 Dashboard — Render.com Blueprint
+#  Deploy at: https://dashboard.render.com/blueprints
+#  Docs:      https://render.com/docs/blueprint-spec
+# ─────────────────────────────────────────────────────────────
 
 services:
   - type: web
     name: flash-dashboard
     runtime: node
-    plan: free
-    buildCommand: npm install
+    region: oregon          # change to: frankfurt | singapore | ohio | virginia
+    plan: starter           # starter ($7/mo) | standard ($25/mo) | pro ($85/mo)
+
+    buildCommand: npm install --omit=dev
     startCommand: node server.js
-    healthCheckPath: /            # express.static serves login.html with 200
+
+    # Health-check — Render marks deploy healthy when this returns 2xx
+    healthCheckPath: /api/stats
+
     envVars:
-      - key: NODE_VERSION
-        value: "20"
+      - key: NODE_ENV
+        value: production
+
       - key: PORT
-        value: "3000"
+        value: 10000          # Render exposes this port
+
+      # Render injects DATABASE_URL automatically from the linked database below
       - key: DATABASE_URL
         fromDatabase:
           name: flash-db
           property: connectionString
-      - key: DB_SSL
-        value: "true"
-      - key: JWT_SECRET
-        generateValue: true
-      - key: ADMIN_USER
-        value: admin
-      - key: ADMIN_PASSWORD
-        sync: false
 
+      # Generate a random secret once at deploy time
+      - key: ADMIN_TOKEN
+        generateValue: true
+
+    autoDeploy: false         # set true to auto-deploy on git push
+
+    # --- WebSocket keep-alive headers ---
+    headers:
+      - path: /ws/*
+        name: Connection
+        value: keep-alive
+
+# ── PostgreSQL managed database ───────────────────────────────
 databases:
   - name: flash-db
-    plan: free
-    databaseName: flash_dashboard
-    user: flash_admin
-    
+    databaseName: flash
+    user: flash
+    region: oregon            # keep same region as the web service
+    plan: starter             # starter (free 90 days) | standard ($20/mo)
+    postgresMajorVersion: 16
+    ipAllowList: []           # empty = only internal Render network
