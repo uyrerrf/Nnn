@@ -10,7 +10,7 @@ services:
     plan: free
     buildCommand: npm install
     startCommand: node server.js
-    healthCheckPath: /auth/me
+    healthCheckPath: /            # express.static serves login.html with 200
     envVars:
       - key: NODE_VERSION
         value: "20"
