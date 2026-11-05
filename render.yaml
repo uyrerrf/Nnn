@@ -1,34 +1,37 @@
-# Flash Dashboard — Render deployment
-# Infrastructure as code. One web service + one postgres instance.
+# Flash Dashboard — Render deployment (FREE TIER — testing only)
+# Note: free web services sleep after 15 min idle. Long-lived WS
+# connections (/ws/device, /ws/dashboard) will be cut when it sleeps.
+# Fine for UI/REST testing. Move to starter when you need persistent uptime.
 
 services:
   - type: web
     name: flash-dashboard
     runtime: node
-    plan: starter            # free plan sleeps; WS C2 needs persistent uptime → starter minimum
+    plan: free
     buildCommand: npm install
     startCommand: node server.js
-    healthCheckPath: /auth/me   # will 401 without token — that's fine, proves the server is up
+    healthCheckPath: /auth/me
     envVars:
       - key: NODE_VERSION
         value: "20"
       - key: PORT
-        value: "3000"              # Render injects its own PORT; this is fallback only
+        value: "3000"
       - key: DATABASE_URL
         fromDatabase:
           name: flash-db
           property: connectionString
       - key: DB_SSL
-        value: "true"              # Render Postgres requires SSL
+        value: "true"
       - key: JWT_SECRET
-        generateValue: true        # Render generates a strong random secret
+        generateValue: true
       - key: ADMIN_USER
         value: admin
       - key: ADMIN_PASSWORD
-        sync: false                # set manually in Render dashboard — never commit real creds
+        sync: false
 
 databases:
   - name: flash-db
     plan: free
     databaseName: flash_dashboard
     user: flash_admin
+    
