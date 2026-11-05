@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<title>Flash — Login</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/style.css">
+<style>
+  body { background: var(--bg); }
+  .login-wrap { animation: fadeIn .3s ease; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+  .btn-primary { width: 100%; padding: .85rem; font-size: .95rem; font-weight: 600; border-radius: var(--radius-sm); }
+  .login-footer { text-align: center; margin-top: 1.25rem; font-size: .78rem; color: var(--text3); }
+</style>
+</head>
+<body>
+<div class="login-wrap">
+  <div class="login-card">
+    <div class="login-logo">
+      <div class="login-logo-mark">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+        </svg>
+      </div>
+      <div class="login-title">Flash C2</div>
+      <div class="login-sub">Control Dashboard</div>
+    </div>
+
+    <form class="login-form" id="loginForm">
+      <div id="loginErr" class="login-err">Invalid username or password.</div>
+
+      <div class="input-group">
+        <label class="input-label" for="username">Username</label>
+        <input class="input" id="username" type="text" autocomplete="username"
+               placeholder="admin" autocapitalize="none" spellcheck="false">
+      </div>
+
+      <div class="input-group">
+        <label class="input-label" for="password">Password</label>
+        <div class="relative">
+          <input class="input" id="password" type="password" autocomplete="current-password"
+                 placeholder="••••••••" style="padding-right:3rem">
+          <button type="button" id="togglePw"
+                  style="position:absolute;right:.75rem;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--text3);padding:.2rem">
+            <svg id="eyeIcon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+              <circle cx="12" cy="12" r="3"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <button type="submit" class="btn btn-primary" id="loginBtn">
+        <span id="loginBtnText">Sign In</span>
+        <div class="spinner hidden" id="loginSpinner" style="width:16px;height:16px;border-width:2px"></div>
+      </button>
+    </form>
+
+    <div class="login-footer">Flash Dashboard • Secure Access</div>
+  </div>
+</div>
+
+<script>
+(function () {
+  const form   = document.getElementById('loginForm');
+  const errBox = document.getElementById('loginErr');
+  const btn    = document.getElementById('loginBtn');
+  const btnTxt = document.getElementById('loginBtnText');
+  const spin   = document.getElementById('loginSpinner');
+  const togglePw = document.getElementById('togglePw');
+  const pwInput  = document.getElementById('password');
+
+  // Redirect if already authenticated
+  fetch('/auth/me').then(r => { if (r.ok) location.href = '/'; });
+
+  togglePw.addEventListener('click', () => {
+    pwInput.type = pwInput.type === 'password' ? 'text' : 'password';
+  });
+
+  form.addEventListener('submit', async e => {
+    e.preventDefault();
+    errBox.classList.remove('show');
+    btnTxt.textContent = 'Signing in…';
+    spin.classList.remove('hidden');
+    btn.disabled = true;
+
+    const username = document.getElementById('username').value.trim();
+    const password = pwInput.value;
+
+    try {
+      const res = await fetch('/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+      });
+      const data = await res.json();
+
+      if (res.ok && data.ok) {
+        location.href = '/';
+      } else {
+        errBox.textContent = data.error || 'Invalid credentials';
+        errBox.classList.add('show');
+      }
+    } catch {
+      errBox.textContent = 'Connection error — server unreachable.';
+      errBox.classList.add('show');
+    } finally {
+      btnTxt.textContent = 'Sign In';
+      spin.classList.add('hidden');
+      btn.disabled = false;
+    }
+  });
+})();
+</script>
+</body>
+</html>

