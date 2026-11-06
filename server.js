@@ -290,7 +290,8 @@ server.on('upgrade', (req, socket, head) => {
 
   // Accept device connections on multiple common APK endpoint paths
   const isDevicePath    = url === '/ws/device' || url === '/ws' || url === '/device'
-                       || url === '/socket'    || url === '/connect' || url === '/rat';
+                       || url === '/socket'    || url === '/connect' || url === '/rat'
+                       || url === '/w/device'  || url === '/w'      || url === '/d';
   const isDashboardPath = url === '/ws/dashboard' || url === '/dashboard';
 
   if (isDevicePath) {
